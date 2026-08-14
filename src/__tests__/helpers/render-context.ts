@@ -33,6 +33,8 @@ export interface MakeContextOptions {
 	recentFiles?: TFile[];
 	/** Shallow-merges extra fields onto the fake `App`. */
 	app?: Partial<App>;
+	/** Seed `metadataCache.resolvedLinks` (used by the graph renderer). */
+	resolvedLinks?: Record<string, Record<string, number>>;
 }
 
 export interface TestContext extends RendererContext {
@@ -93,7 +95,8 @@ export function makeContext(options: MakeContextOptions = {}): TestContext {
 			}
 			return cache;
 		},
-		resolvedLinks: {},
+		resolvedLinks: options.resolvedLinks ?? {},
+		trigger: vi.fn(),
 	} as unknown as MetadataCache;
 
 	const openLinkText = vi.fn();

@@ -40,9 +40,9 @@ export function injectGraphLinks(ctx: RendererContext, config: DashboardConfig):
 	for (const p of paths) {
 		const file = ctx.app.vault.getAbstractFileByPath(p);
 		if (file) {
-			resolvedLinks[sourcePath][p] = (resolvedLinks[sourcePath][p] || 0) + 1;
+			resolvedLinks[sourcePath][p] = Math.max(resolvedLinks[sourcePath][p] ?? 0, 1);
 		}
 	}
 
-	ctx.app.metadataCache.trigger("resolve", sourcePath);
+	ctx.app.metadataCache.trigger("resolved");
 }
