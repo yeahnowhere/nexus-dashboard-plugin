@@ -21,6 +21,8 @@ export interface FakeFileSpec {
 	content?: string;
 	listItems?: FakeListItem[];
 	frontmatterTags?: string[];
+	/** `CachedMetadata.sections` returned by `getFileCache`. */
+	sections?: Array<{ type: string; info?: string }>;
 }
 
 export interface MakeContextOptions {
@@ -41,6 +43,8 @@ export interface TestContext extends RendererContext {
 	app: App;
 	settings: NexusSettings;
 	files: TFile[];
+	/** The raw `FakeFileSpec`s backing this context (mutable: edit `content` then re-scan). */
+	fileSpecs: FakeFileSpec[];
 	getRecentFiles: ReturnType<typeof vi.fn>;
 	saveSettings: ReturnType<typeof vi.fn>;
 	rerender: ReturnType<typeof vi.fn>;
@@ -93,6 +97,7 @@ export function makeContext(options: MakeContextOptions = {}): TestContext {
 			if (spec.frontmatterTags) {
 				cache.frontmatter = { tags: spec.frontmatterTags };
 			}
+			if (spec.sections) cache.sections = spec.sections;
 			return cache;
 		},
 		resolvedLinks: options.resolvedLinks ?? {},
@@ -128,6 +133,7 @@ export function makeContext(options: MakeContextOptions = {}): TestContext {
 		settings,
 		sourcePath: options.sourcePath ?? "Dashboard.md",
 		files,
+		fileSpecs: specs,
 		getRecentFiles,
 		saveSettings: vi.fn(async () => {}),
 		rerender: vi.fn(),

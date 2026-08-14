@@ -1,8 +1,17 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi } from "vitest";
-import { collectCardPaths, injectGraphLinks } from "../renderer/graph";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+	clearInjectedGraphLinks,
+	collectCardPaths,
+	extractDashboardBlocks,
+	injectAllGraphLinks,
+	injectGraphLinks,
+} from "../renderer/graph";
 import { makeContext } from "./helpers/render-context";
+import { DEFAULT_MOCS } from "../defaults";
 import type { CardConfig, DashboardBlock, DashboardConfig, SectionConfig } from "../types";
+
+const DASH_SECTION = [{ type: "code", info: "nexus-dashboard" }];
 
 function card(path: string): CardConfig {
 	return { type: "big", label: path, path, icon: "X" };
@@ -27,6 +36,12 @@ function cacheOf(ctx: ReturnType<typeof makeContext>) {
 		trigger: ReturnType<typeof vi.fn>;
 	};
 }
+
+// `injectedEdges` is module-level state shared across tests in this file;
+// reset it so stale-edge removal in one test can't touch another's context.
+beforeEach(() => {
+	clearInjectedGraphLinks(makeContext().app);
+});
 
 describe("injectGraphLinks", () => {
 	it("injects all reachable card paths as weight-1 links under the source path", () => {
@@ -129,5 +144,225 @@ describe("collectCardPaths", () => {
 		collectCardPaths(ctx, [section(["MOC/A.md", "Note.md"])], paths, ["MOC"]);
 
 		expect(paths).toEqual(["Note.md"]);
+	});
+});
+
+describe("extractDashboardBlocks", () => {
+	it("extracts every nexus-dashboard code block from a note", () => {
+		const content = [
+			"# Title",
+			"```nexus-dashboard",
+			"section:",
+			"  cards:",
+			"    - path: A.md",
+			"```",
+			"text between",
+			"```nexus-dashboard",
+			"section:",
+			"  cards:",
+			"    - path: B.md",
+			"```",
+			"",
+		].join("\n");
+
+		expect(extractDashboardBlocks(content)).toEqual([
+			"section:\n  cards:\n    - path: A.md",
+			"section:\n  cards:\n    - path: B.md",
+		]);
+	});
+
+	it("returns an empty list for notes without dashboard blocks", () => {
+		expect(extractDashboardBlocks("plain markdown")).toEqual([]);
+		expect(extractDashboardBlocks("```other\nnexus-dashboard\n```\n")).toEqual([]);
+	});
+});
+
+describe("injectAllGraphLinks", () => {
+	const emptyBlock = "```nexus-dashboard\n```\n";
+	const emptyDashboard = { path: "Nexus.md", sections: DASH_SECTION, content: emptyBlock };
+	const mocFiles = DEFAULT_MOCS.map((m) => ({ path: m.path }));
+
+	it("injects settings MOC edges for an empty dashboard block", async () => {
+		const ctx = makeContext({ files: [emptyDashboard, ...mocFiles] });
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["Nexus.md"]).toEqual(
+			Object.fromEntries(DEFAULT_MOCS.map((m) => [m.path, 1])),
+		);
+		expect(cacheOf(ctx).trigger).toHaveBeenCalledWith("resolved");
+	});
+
+	it("skips everything when showGraph is off", async () => {
+		const ctx = makeContext({ files: [emptyDashboard, ...mocFiles], settings: { showGraph: false } });
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["Nexus.md"]).toBeUndefined();
+		expect(cacheOf(ctx).trigger).not.toHaveBeenCalled();
+	});
+
+	it("injects parsed card paths for a non-empty dashboard block", async () => {
+		const content = [
+			"```nexus-dashboard",
+			"section:",
+			"  cards:",
+			"    - type: big",
+			"      path: MOC/Sub-A.md",
+			"    - type: big",
+			"      path: MOC/Sub-B.md",
+			"```",
+			"",
+		].join("\n");
+		const ctx = makeContext({
+			files: [
+				{ path: "MOC/Knowledge MOC.md", sections: DASH_SECTION, content },
+				{ path: "MOC/Sub-A.md" },
+				{ path: "MOC/Sub-B.md" },
+			],
+		});
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["MOC/Knowledge MOC.md"]).toEqual({
+			"MOC/Sub-A.md": 1,
+			"MOC/Sub-B.md": 1,
+		});
+	});
+
+	it("skips a block that opts out with graph: false", async () => {
+		const content = [
+			"```nexus-dashboard",
+			"graph:",
+			"  showGraph: false",
+			"section:",
+			"  cards:",
+			"    - type: big",
+			"      path: MOC/Sub.md",
+			"```",
+			"",
+		].join("\n");
+		const ctx = makeContext({
+			files: [
+				{ path: "MOC/Knowledge MOC.md", sections: DASH_SECTION, content },
+				{ path: "MOC/Sub.md" },
+			],
+		});
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["MOC/Knowledge MOC.md"]).toBeUndefined();
+		expect(cacheOf(ctx).trigger).not.toHaveBeenCalled();
+	});
+
+	it("respects graph.exclude in a dashboard block", async () => {
+		const content = [
+			"```nexus-dashboard",
+			"graph:",
+			"  showGraph: true",
+			"  exclude: Archived",
+			"section:",
+			"  cards:",
+			"    - type: big",
+			"      path: MOC/Archived/Old.md",
+			"    - type: big",
+			"      path: MOC/Sub.md",
+			"```",
+			"",
+		].join("\n");
+		const ctx = makeContext({
+			files: [
+				{ path: "MOC/Knowledge MOC.md", sections: DASH_SECTION, content },
+				{ path: "MOC/Archived/Old.md" },
+				{ path: "MOC/Sub.md" },
+			],
+		});
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["MOC/Knowledge MOC.md"]).toEqual({ "MOC/Sub.md": 1 });
+	});
+
+	it("skips card paths that do not exist in the vault", async () => {
+		const ctx = makeContext({
+			files: [emptyDashboard],
+			settings: { mocs: [{ path: "MOC/Missing.md", title: "Missing", desc: "", icon: "X" }] },
+		});
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["Nexus.md"]).toBeUndefined();
+		expect(cacheOf(ctx).trigger).not.toHaveBeenCalled();
+	});
+
+	it("removes stale injected edges after the block changes", async () => {
+		const withCard = (path: string) =>
+			[
+				"```nexus-dashboard",
+				"section:",
+				"  cards:",
+				"    - type: big",
+				`      path: ${path}`,
+				"```",
+				"",
+			].join("\n");
+		const ctx = makeContext({
+			files: [
+				{ path: "MOC/Knowledge MOC.md", sections: DASH_SECTION, content: withCard("MOC/Sub-A.md") },
+				{ path: "MOC/Sub-A.md" },
+				{ path: "MOC/Sub-B.md" },
+			],
+		});
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+		expect(cacheOf(ctx).resolvedLinks["MOC/Knowledge MOC.md"]).toEqual({ "MOC/Sub-A.md": 1 });
+
+		const spec = ctx.fileSpecs.find((s) => s.path === "MOC/Knowledge MOC.md");
+		if (!spec) throw new Error("missing dashboard spec");
+		spec.content = withCard("MOC/Sub-B.md");
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["MOC/Knowledge MOC.md"]).toEqual({ "MOC/Sub-B.md": 1 });
+	});
+
+	it("preserves pre-existing higher link weights", async () => {
+		const ctx = makeContext({
+			files: [emptyDashboard],
+			resolvedLinks: { "Nexus.md": { "MOC/Journal MOC.md": 3 } },
+			settings: { mocs: [{ path: "MOC/Journal MOC.md", title: "J", desc: "", icon: "X" }] },
+		});
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["Nexus.md"]["MOC/Journal MOC.md"]).toBe(3);
+		expect(cacheOf(ctx).trigger).not.toHaveBeenCalled();
+	});
+
+	it("only triggers resolved when the link set actually changed", async () => {
+		const ctx = makeContext({ files: [emptyDashboard, ...mocFiles] });
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).trigger).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not touch files without dashboard sections", async () => {
+		const ctx = makeContext({ files: [{ path: "Note.md", content: "plain" }] });
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks).toEqual({});
+		expect(cacheOf(ctx).trigger).not.toHaveBeenCalled();
+	});
+
+	it("clearInjectedGraphLinks removes all injected edges", async () => {
+		const ctx = makeContext({ files: [emptyDashboard, ...mocFiles] });
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+		expect(Object.keys(cacheOf(ctx).resolvedLinks["Nexus.md"])).toHaveLength(DEFAULT_MOCS.length);
+
+		clearInjectedGraphLinks(ctx.app);
+
+		expect(cacheOf(ctx).resolvedLinks["Nexus.md"]).toEqual({});
 	});
 });

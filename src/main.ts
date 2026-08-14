@@ -14,6 +14,7 @@ import { DEFAULT_SETTINGS, mergeSettings, deepCloneDefaults } from "./defaults";
 import { hasExtension, ensureExtension } from "./utils";
 import { NexusSettingTab, clearVaultFoldersCache } from "./settings";
 import { NexusRenderer } from "./renderer/index";
+import { clearInjectedGraphLinks, injectAllGraphLinks } from "./renderer/graph";
 import {
 	STARTUP_RECONCILE_LOOKBACK_MS,
 	collectModifiedEvents,
@@ -28,6 +29,7 @@ export default class NexusDashboardPlugin extends Plugin {
 	private saveTimer: ReturnType<typeof setTimeout> | null = null;
 	private taskCheckTimer: ReturnType<typeof setTimeout> | null = null;
 	private propertyCheckTimer: ReturnType<typeof setTimeout> | null = null;
+	private graphRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 	private taskCheckQueue: Array<{ file: TFile; editor: Editor }> = [];
 	private propertyCheckQueue: Set<string> = new Set();
 	private taskSnapshot = new Map<string, Map<number, string>>();
@@ -142,6 +144,21 @@ export default class NexusDashboardPlugin extends Plugin {
 		// ── Global activity tracking ────────────────────────
 		this.registerActivityTracking();
 
+		// ── Synthetic graph links ───────────────────────────
+		// Inject dashboard → MOC → card edges into the metadata link cache at
+		// load (and on vault changes) so Graph View shows the relationships
+		// even before any dashboard file is opened.
+		this.app.workspace.onLayoutReady(() => {
+			setTimeout(() => {
+				void injectAllGraphLinks(this.app, this.settings);
+			}, 3000);
+		});
+		this.registerEvent(this.app.vault.on("create", () => this.scheduleGraphRefresh()));
+		this.registerEvent(this.app.vault.on("modify", () => this.scheduleGraphRefresh()));
+		this.registerEvent(this.app.vault.on("delete", () => this.scheduleGraphRefresh()));
+		this.registerEvent(this.app.vault.on("rename", () => this.scheduleGraphRefresh()));
+		this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleGraphRefresh()));
+
 		// ── Open on startup ─────────────────────────────────
 		if (this.settings.openOnStartup) {
 			this.app.workspace.onLayoutReady(() => {
@@ -151,6 +168,8 @@ export default class NexusDashboardPlugin extends Plugin {
 	}
 
 	onunload() {
+		// Remove synthetic graph edges so disabling the plugin leaves no phantom links.
+		clearInjectedGraphLinks(this.app);
 		// Flush any pending activity-log write so events aren't lost on quit.
 		if (this.saveTimer) {
 			clearTimeout(this.saveTimer);
@@ -203,6 +222,16 @@ export default class NexusDashboardPlugin extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 		this.rerenderDashboards();
+		this.scheduleGraphRefresh();
+	}
+
+	/** Debounced re-scan of the vault for graph-link injection. */
+	private scheduleGraphRefresh(): void {
+		if (this.graphRefreshTimer) return;
+		this.graphRefreshTimer = setTimeout(() => {
+			this.graphRefreshTimer = null;
+			void injectAllGraphLinks(this.app, this.settings);
+		}, 600);
 	}
 
 	// ── Activity log ───────────────────────────────────────
