@@ -1,4 +1,24 @@
 import { CHARS, FigletChar, FONT_HEIGHT } from "./fonts/ansi-shadow";
+import {
+	CHARS as SLANT_CHARS,
+	FONT_HEIGHT as SLANT_HEIGHT,
+	FONT_NAME as SLANT_NAME,
+} from "./fonts/slant";
+import {
+	CHARS as SMALL_SLANT_CHARS,
+	FONT_HEIGHT as SMALL_SLANT_HEIGHT,
+	FONT_NAME as SMALL_SLANT_NAME,
+} from "./fonts/small-slant";
+import {
+	CHARS as STANDARD_CHARS,
+	FONT_HEIGHT as STANDARD_HEIGHT,
+	FONT_NAME as STANDARD_NAME,
+} from "./fonts/standard";
+import {
+	CHARS as GRAFFITI_CHARS,
+	FONT_HEIGHT as GRAFFITI_HEIGHT,
+	FONT_NAME as GRAFFITI_NAME,
+} from "./fonts/graffiti";
 
 /**
  * Definition of a FIGlet font, containing character line-art for ASCII rendering.
@@ -96,6 +116,14 @@ export function renderFiglet(text: string, _options?: { font?: FigletFont }): st
 
 const FONTS: Record<string, FigletFont> = {
 	"ANSI Shadow": DEFAULT_FONT,
+	[SLANT_NAME]: { name: SLANT_NAME, height: SLANT_HEIGHT, chars: SLANT_CHARS },
+	[SMALL_SLANT_NAME]: {
+		name: SMALL_SLANT_NAME,
+		height: SMALL_SLANT_HEIGHT,
+		chars: SMALL_SLANT_CHARS,
+	},
+	[STANDARD_NAME]: { name: STANDARD_NAME, height: STANDARD_HEIGHT, chars: STANDARD_CHARS },
+	[GRAFFITI_NAME]: { name: GRAFFITI_NAME, height: GRAFFITI_HEIGHT, chars: GRAFFITI_CHARS },
 };
 
 /**

@@ -4,14 +4,13 @@ import {
 	Setting,
 	Notice,
 	setIcon,
-	Modal,
 	ToggleComponent,
 	TextComponent,
 	DropdownComponent,
 	ExtraButtonComponent,
 	copy,
 } from "obsidian";
-import type NexusDashboardPlugin from "./main";
+import type NexusDashboardPlugin from "../main";
 import type {
 	MocEntry,
 	RowLayoutEntry,
@@ -19,136 +18,39 @@ import type {
 	StatEntry,
 	ContentSlotType,
 	VaultListEntry,
+	FileTypeListEntry,
 	HeadingConfig,
 	DividerDesign,
 	StatMetric,
 	StatScope,
-} from "./types";
-import { getAvailableFonts, renderFiglet } from "./figlet";
-import { ICONS, SMALL_ICONS } from "./icons";
+	RowLayoutSlot,
+} from "../types";
+import { getAvailableFonts, getFontByName, renderFiglet } from "../figlet";
+import { SMALL_ICONS } from "../icons";
 import {
 	DEFAULT_SETTINGS,
 	DIVIDER_PRESETS,
 	DIVIDER_PRESET_NAMES,
 	detectDividerPreset,
 	deepCloneDefaults,
-} from "./defaults";
-import { safeParseInt } from "./utils";
-import { statSummary } from "./stats";
+	mergeSettings,
+} from "../defaults";
+import { DASHBOARD_PRESETS, type DashboardPreset } from "../presets";
+import { safeParseInt } from "../utils";
+import { statSummary } from "../stats";
+import { ConfirmModal } from "./confirm-modal";
+import {
+	ICON_NAMES,
+	CONTENT_SLOT_OPTIONS,
+	DividerControlSettings,
+	SETTING_TABS,
+	getVaultFolders,
+	SVG,
+} from "./shared";
 
-export const ICON_NAMES = Object.keys(ICONS);
-
-export const CONTENT_SLOT_OPTIONS: Record<ContentSlotType, string> = {
-	none: "Empty",
-	stats: "Stats",
-	search: "Search",
-	heading: "Heading",
-	"moc-cards": "MOC Cards",
-	"quick-links": "Quick Links",
-	"vault-activity": "Vault Activity",
-	divider: "Divider",
-	heatmap: "Heatmap",
-	timeline: "Activity Timeline",
-	clock: "Clock",
-	filetypes: "File Types",
-	tasks: "Task Summary",
-};
-
-let vaultFoldersCache: string[] | null = null;
-let vaultFoldersCacheAt = 0;
-
-/** Drop the cached vault-folder list (e.g. after a folder rename/move). */
-export function clearVaultFoldersCache(): void {
-	vaultFoldersCache = null;
-	vaultFoldersCacheAt = 0;
-}
-
-function getVaultFolders(app: App): string[] {
-	const now = Date.now();
-	if (vaultFoldersCache && now - vaultFoldersCacheAt < 5000) {
-		return vaultFoldersCache;
-	}
-	const folders = new Set<string>();
-	for (const file of app.vault.getMarkdownFiles()) {
-		const parts = file.path.split("/");
-		if (parts.length > 1) {
-			// Collect every unique folder path
-			let current = "";
-			for (let i = 0; i < parts.length - 1; i++) {
-				current = current ? `${current}/${parts[i]}` : parts[i];
-				folders.add(current);
-			}
-		}
-	}
-	vaultFoldersCache = Array.from(folders).sort();
-	vaultFoldersCacheAt = now;
-	return vaultFoldersCache;
-}
-
-// ── SVG Icons ──────────────────────────────────────────────────
-
-const SVG = {
-	chevronDown: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`,
-};
-
-// ── Confirmation Modal ───────────────────────────────────────
-
-class ConfirmModal extends Modal {
-	private title: string;
-	private message: string;
-	private onConfirm: () => void;
-
-	constructor(app: App, title: string, message: string, onConfirm: () => void) {
-		super(app);
-		this.title = title;
-		this.message = message;
-		this.onConfirm = onConfirm;
-	}
-
-	onOpen(): void {
-		const { contentEl } = this;
-		contentEl.createEl("h3", { text: this.title });
-		contentEl.createEl("p", { text: this.message });
-
-		const btnRow = contentEl.createDiv({ cls: "modal-button-container" });
-
-		const cancelBtn = btnRow.createEl("button", { text: "Cancel" });
-		cancelBtn.addEventListener("click", () => this.close());
-
-		const confirmBtn = btnRow.createEl("button", { text: "Confirm", cls: "mod-warning" });
-		confirmBtn.addEventListener("click", () => {
-			this.onConfirm();
-			this.close();
-		});
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
-}
+export { ICON_NAMES, CONTENT_SLOT_OPTIONS, clearVaultFoldersCache } from "./shared";
 
 // ── Settings Tab ───────────────────────────────────────────────
-
-interface SettingTab {
-	id: string;
-	name: string;
-	icon: string;
-}
-
-interface DividerControlSettings {
-	show: boolean;
-	label: string;
-	labelPlaceholder: string;
-	onShow: (value: boolean) => Promise<void>;
-	onLabel: (value: string) => Promise<void>;
-}
-
-const SETTING_TABS: SettingTab[] = [
-	{ id: "general", name: "General", icon: "gear" },
-	{ id: "header", name: "Header", icon: "type" },
-	{ id: "layout", name: "Dashboard", icon: "layout-grid" },
-	{ id: "components", name: "Components", icon: "component" },
-];
 
 export class NexusSettingTab extends PluginSettingTab {
 	plugin: NexusDashboardPlugin;
@@ -179,8 +81,6 @@ export class NexusSettingTab extends PluginSettingTab {
 		switch (slot) {
 			case "stats":
 				return s.showStats;
-			case "search":
-				return s.showSearch;
 			case "moc-cards":
 				return s.showMocCards;
 			case "quick-links":
@@ -210,7 +110,6 @@ export class NexusSettingTab extends PluginSettingTab {
 		for (const id of [
 			"moc-cards",
 			"stats",
-			"search",
 			"vault-activity",
 			"quick-links",
 			"heatmap",
@@ -286,6 +185,9 @@ export class NexusSettingTab extends PluginSettingTab {
 					break;
 				case "layout":
 					this.displayDashboardTab(content);
+					break;
+				case "presets":
+					this.displayPresetsTab(content);
 					break;
 				case "components":
 					this.displayComponentsTab(content);
@@ -616,6 +518,39 @@ export class NexusSettingTab extends PluginSettingTab {
 		}
 	}
 
+	private addFileTypeListSelector(
+		parent: HTMLElement,
+		paddingLeft: string,
+		currentValue: string,
+		onChange: (value: string) => void,
+	): void {
+		const row = parent.createDiv({ cls: "nexus-column-slot-row" });
+		row.style.display = "flex";
+		row.style.alignItems = "center";
+		row.style.gap = "8px";
+		row.style.paddingLeft = paddingLeft;
+
+		const label = row.createEl("span", { text: "List:", cls: "setting-item-description" });
+		label.style.minWidth = "40px";
+
+		const select = row.createEl("select", { cls: "dropdown" });
+		select.createEl("option", { text: "— Select list —", value: "" });
+		for (const ft of this.plugin.settings.fileTypeLists) {
+			const opt = select.createEl("option", { text: ft.name, value: ft.name });
+			if (ft.name === currentValue) opt.selected = true;
+		}
+		select.addEventListener("change", () => onChange(select.value));
+
+		if (this.plugin.settings.fileTypeLists.length === 0) {
+			const hint = row.createEl("span", {
+				text: "Add file-type lists in the Components tab first",
+				cls: "setting-item-description",
+			});
+			hint.style.color = "var(--text-muted)";
+			hint.style.fontStyle = "italic";
+		}
+	}
+
 	private addDividerLabelInput(
 		parent: HTMLElement,
 		paddingLeft: string,
@@ -664,7 +599,7 @@ export class NexusSettingTab extends PluginSettingTab {
 	/** Drop out-of-range or malformed per-slot override keys after an import. */
 	private pruneSlotOverrides(
 		map: Record<string, unknown> | undefined,
-		slots: (ContentSlotType | ContentSlotType[])[],
+		slots: RowLayoutSlot[],
 	): void {
 		if (!map) return;
 		for (const key of Object.keys(map)) {
@@ -681,10 +616,50 @@ export class NexusSettingTab extends PluginSettingTab {
 			if (m[2] !== undefined) {
 				const sub = parseInt(m[2], 10);
 				const slotVal = slots[col];
-				const subLen = Array.isArray(slotVal) ? slotVal.length : 1;
-				if (sub >= subLen) delete map[key];
+				if (Array.isArray(slotVal)) {
+					if (sub >= slotVal.length) delete map[key];
+				} else {
+					// `i-j` keys only apply to stacked sub-slot columns
+					delete map[key];
+				}
 			}
 		}
+	}
+
+	/** Prune a row layout's own overrides, then recurse into nested rows. */
+	private pruneRowLayoutOverrides(row: RowLayoutEntry): void {
+		this.pruneSlotOverrides(row.slotHeadings, row.slots);
+		this.pruneSlotOverrides(row.vaultListSlots, row.slots);
+		this.pruneSlotOverrides(row.fileTypeListSlots, row.slots);
+		this.pruneSlotOverrides(row.dividerSlots, row.slots);
+		for (const slot of row.slots) {
+			if (Array.isArray(slot)) {
+				for (const sub of slot) {
+					if (typeof sub === "object") this.pruneRowLayoutOverrides(sub);
+				}
+			} else if (typeof slot === "object") {
+				this.pruneRowLayoutOverrides(slot);
+			}
+		}
+	}
+
+	/** Normalise a row layout (and any nested rows) to valid bounds. */
+	private sanitizeRowLayout(row: RowLayoutEntry): void {
+		row.columns = Math.max(1, Math.min(12, safeParseInt(row.columns, 2, 1) ?? 2));
+		if (!Array.isArray(row.slots)) row.slots = [];
+		row.slots = row.slots.slice(0, 12);
+		while (row.slots.length < row.columns) row.slots.push("none");
+		row.slots = row.slots.slice(0, row.columns);
+		for (const slot of row.slots) {
+			if (Array.isArray(slot)) {
+				for (const sub of slot) {
+					if (typeof sub === "object") this.sanitizeRowLayout(sub);
+				}
+			} else if (typeof slot === "object") {
+				this.sanitizeRowLayout(slot);
+			}
+		}
+		this.pruneRowLayoutOverrides(row);
 	}
 
 	/** Normalise imported settings so arrays/overrides stay within valid bounds. */
@@ -697,21 +672,13 @@ export class NexusSettingTab extends PluginSettingTab {
 				.map((l) => ({
 					url: l.url,
 					label: typeof l.label === "string" ? l.label : "",
-					icon: typeof l.icon === "string" ? l.icon : "",
 				}))
 				.slice(0, 50);
 		}
 
 		if (Array.isArray(s.rowLayouts)) {
 			for (const row of s.rowLayouts) {
-				row.columns = Math.max(1, Math.min(12, safeParseInt(row.columns, 2, 1) ?? 2));
-				if (!Array.isArray(row.slots)) row.slots = [];
-				row.slots = row.slots.slice(0, 12);
-				while (row.slots.length < row.columns) row.slots.push("none");
-				row.slots = row.slots.slice(0, row.columns);
-				this.pruneSlotOverrides(row.slotHeadings, row.slots);
-				this.pruneSlotOverrides(row.vaultListSlots, row.slots);
-				this.pruneSlotOverrides(row.dividerSlots, row.slots);
+				this.sanitizeRowLayout(row);
 			}
 		}
 
@@ -721,6 +688,7 @@ export class NexusSettingTab extends PluginSettingTab {
 				col.slots = col.slots.slice(0, 12);
 				this.pruneSlotOverrides(col.slotHeadings, col.slots);
 				this.pruneSlotOverrides(col.vaultListSlots, col.slots);
+				this.pruneSlotOverrides(col.fileTypeListSlots, col.slots);
 				this.pruneSlotOverrides(col.dividerSlots, col.slots);
 			}
 		}
@@ -730,20 +698,6 @@ export class NexusSettingTab extends PluginSettingTab {
 				vl.count = Math.max(3, Math.min(50, safeParseInt(vl.count, 9, 3) ?? 9));
 			}
 		}
-	}
-
-	/** Commit a free-typed icon input value on blur so it isn't lost (#17). */
-	private addIconPickerCommitBlur(
-		input: HTMLInputElement,
-		preview: HTMLElement,
-		onCommit: (value: string) => void,
-	): void {
-		const commit = () => {
-			onCommit(input.value);
-			preview.innerHTML = SMALL_ICONS[input.value] || SMALL_ICONS["MOC"] || "";
-		};
-		input.addEventListener("change", commit);
-		input.addEventListener("blur", commit);
 	}
 
 	// ═══════════════════════════════════════════════════════
@@ -854,6 +808,113 @@ export class NexusSettingTab extends PluginSettingTab {
 		}
 	}
 
+	//  TAB: Presets (preloaded layout templates)
+	// ═══════════════════════════════════════════════════════
+
+	private displayPresetsTab(containerEl: HTMLElement): void {
+		containerEl.createEl("p", {
+			text:
+				"Apply a preloaded dashboard layout with one click. Presets include every component and never touch your MOC cards, stats, vault lists, or quick links.",
+			cls: "setting-item-description",
+		});
+
+		const grid = containerEl.createDiv({ cls: "nexus-preset-grid" });
+		for (const preset of DASHBOARD_PRESETS) {
+			this.renderPresetCard(grid, preset);
+		}
+	}
+
+	private renderPresetCard(containerEl: HTMLElement, preset: DashboardPreset): void {
+		const card = containerEl.createDiv({ cls: "nexus-preset-card" });
+
+		const header = card.createDiv({ cls: "nexus-preset-card-header" });
+		header.createEl("h3", { text: preset.name, cls: "nexus-preset-name" });
+
+		if (preset.description) {
+			card.createEl("p", { text: preset.description, cls: "nexus-preset-desc" });
+		}
+
+		// Mini schematic of the layout
+		const schematic = card.createDiv({ cls: "nexus-preset-schematic" });
+		for (const row of preset.rowLayouts) {
+			const rowEl = schematic.createDiv({ cls: "nexus-preset-row" });
+			const proportions = row.proportion.split("/");
+			for (let i = 0; i < row.columns; i++) {
+				const slot = row.slots?.[i] ?? "none";
+				const colEl = rowEl.createDiv({ cls: "nexus-preset-col" });
+				colEl.style.flexBasis = `${parseFloat(proportions[i] ?? "100")}%`;
+				const labels = this.collectSlotLabels(slot);
+				for (const label of labels) {
+					colEl.createEl("span", { text: label, cls: "nexus-preset-col-label" });
+				}
+			}
+		}
+
+		// Component chips
+		const chips = card.createDiv({ cls: "nexus-preset-chips" });
+		const components = this.collectPresetComponents(preset);
+		for (const component of components) {
+			chips.createEl("span", {
+				text: CONTENT_SLOT_OPTIONS[component] || component,
+				cls: "nexus-preset-chip",
+			});
+		}
+
+		// Apply action
+		const actions = card.createDiv({ cls: "nexus-preset-actions" });
+		actions
+			.createEl("button", { text: "Apply layout", cls: "mod-cta" })
+			.addEventListener("click", () => {
+				this.applyPreset(preset);
+			});
+	}
+
+	/** Flatten a slot into a short list of display labels for the schematic. */
+	private collectSlotLabels(slot: RowLayoutSlot): string[] {
+		if (typeof slot === "string") return [CONTENT_SLOT_OPTIONS[slot] || slot];
+		if (Array.isArray(slot)) return slot.flatMap((sub) => this.collectSlotLabels(sub));
+		return this.collectSlotLabels(slot.slots[0] ?? "none");
+	}
+
+	/** Collect every distinct content component referenced by a preset's rows. */
+	private collectPresetComponents(preset: DashboardPreset): ContentSlotType[] {
+		const found = new Set<ContentSlotType>();
+		const scan = (slot: RowLayoutSlot): void => {
+			if (typeof slot === "string") {
+				if (slot !== "none" && slot !== "divider" && slot !== "heading") {
+					found.add(slot as ContentSlotType);
+				}
+				return;
+			}
+			if (Array.isArray(slot)) {
+				for (const sub of slot) scan(sub);
+				return;
+			}
+			for (const sub of slot.slots) scan(sub);
+		};
+		for (const row of preset.rowLayouts) {
+			for (const slot of row.slots) scan(slot);
+		}
+		return Array.from(found);
+	}
+
+	/** Replace the current layout with a preset, keeping the user's own content. */
+	private applyPreset(preset: DashboardPreset): void {
+		new ConfirmModal(
+			this.app,
+			"Apply preset?",
+			`Replace your current dashboard layout with "${preset.name}"? Your MOC cards, stats, vault lists, and quick links are kept.`,
+			async () => {
+				this.plugin.settings = mergeSettings({
+					...preset.settings,
+					rowLayouts: preset.rowLayouts,
+					columnLayouts: [],
+				});
+				await this.saveAndRefresh();
+			},
+		).open();
+	}
+
 	private renderRowLayoutCard(
 		containerEl: HTMLElement,
 		layout: RowLayoutEntry,
@@ -875,8 +936,15 @@ export class NexusSettingTab extends PluginSettingTab {
 		const slotSummary = slots
 			.map((s) => {
 				if (Array.isArray(s)) {
-					return s.map((sub) => CONTENT_SLOT_OPTIONS[sub] || "Empty").join(" + ");
+					return s
+						.map((sub) =>
+							typeof sub === "object"
+								? `⤷ ${sub.name || "Nested Row"}`
+								: CONTENT_SLOT_OPTIONS[sub] || "Empty",
+						)
+						.join(" + ");
 				}
+				if (typeof s === "object") return `⤷ ${s.name || "Nested Row"}`;
 				return CONTENT_SLOT_OPTIONS[s] || "Empty";
 			})
 			.join(" | ");
@@ -929,11 +997,15 @@ export class NexusSettingTab extends PluginSettingTab {
 			if (Array.isArray(slot)) {
 				for (const sub of slot) {
 					const subEl = colEl.createDiv({ cls: "nexus-row-editor-col-sub" });
-					subEl.createEl("span", {
-						text: CONTENT_SLOT_OPTIONS[sub] || "Empty",
-						cls: "nexus-row-editor-col-label",
-					});
+					const subLabel =
+						typeof sub === "object"
+							? `⤷ Nested row: ${sub.name || "Nested Row"}`
+							: CONTENT_SLOT_OPTIONS[sub] || "Empty";
+					subEl.createEl("span", { text: subLabel, cls: "nexus-row-editor-col-label" });
 				}
+			} else if (typeof slot === "object") {
+				const slotLabel = `Nested row: ${slot.name || "Nested Row"}`;
+				colEl.createEl("span", { text: slotLabel, cls: "nexus-row-editor-col-label" });
 			} else {
 				const slotLabel = CONTENT_SLOT_OPTIONS[slot as ContentSlotType] || "Empty";
 				colEl.createEl("span", { text: slotLabel, cls: "nexus-row-editor-col-label" });
@@ -978,9 +1050,7 @@ export class NexusSettingTab extends PluginSettingTab {
 				while (currentSlots.length > safeCols) {
 					currentSlots.pop();
 				}
-				this.pruneSlotOverrides(layoutRef.slotHeadings, currentSlots);
-				this.pruneSlotOverrides(layoutRef.vaultListSlots, currentSlots);
-				this.pruneSlotOverrides(layoutRef.dividerSlots, currentSlots);
+				this.pruneRowLayoutOverrides(layoutRef);
 			};
 			slider
 				.setLimits(1, 4, 1)
@@ -1022,24 +1092,70 @@ export class NexusSettingTab extends PluginSettingTab {
 		});
 
 		// ── Slot editors per column ──
-		const currentSlots = layout.slots || [];
 		if (!layout.slotHeadings) layout.slotHeadings = {};
 
-		for (let i = 0; i < layout.columns; i++) {
-			const slotVal = currentSlots[i] || "none";
-			const isSubSlot = Array.isArray(slotVal);
-			const slotList: ContentSlotType[] = isSubSlot
-				? (slotVal as ContentSlotType[])
-				: [slotVal as ContentSlotType];
+		this.renderRowSlotEditors(fields, layout, false);
+	}
 
-			const colHeading = fields.createEl("div", { cls: "nexus-col-slot-heading" });
-			colHeading.createEl("strong", { text: `Column ${i + 1}` });
+	/**
+	 * Builds a fresh nested row layout for embedding inside a slot.
+	 */
+	private newNestedRow(): RowLayoutEntry {
+		return {
+			id: `row-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+			name: "Nested Row",
+			columns: 2,
+			proportion: "50/50",
+			align: "top",
+			slots: ["none", "none"],
+		};
+	}
+
+	/**
+	 * Per-column slot editors for a row layout. Recurses into nested rows so
+	 * rows-within-rows are fully editable. All mutations go through the passed
+	 * {@link RowLayoutEntry} reference, which is the live settings object.
+	 */
+	private renderRowSlotEditors(
+		container: HTMLElement,
+		row: RowLayoutEntry,
+		isNested: boolean,
+	): void {
+		for (let i = 0; i < row.columns; i++) {
+			const slotVal = row.slots?.[i] || "none";
+
+			const colHeading = container.createEl("div", { cls: "nexus-col-slot-heading" });
+			colHeading.createEl("strong", { text: isNested ? `Nested column ${i + 1}` : `Column ${i + 1}` });
+
+			// Whole column is a nested row
+			if (!Array.isArray(slotVal) && typeof slotVal === "object") {
+				this.renderNestedRowEditor(container, slotVal, async () => {
+					row.slots[i] = "none";
+					await this.saveAndRefresh();
+				});
+				continue;
+			}
+
+			const isSubSlot = Array.isArray(slotVal);
+			const slotList: RowLayoutSlot[] = isSubSlot ? (slotVal as RowLayoutSlot[]) : [slotVal];
 
 			for (let si = 0; si < slotList.length; si++) {
-				const subKey = isSubSlot ? `${i}-${si}` : String(i);
 				const currentSlot = slotList[si];
 
-				const slotRow = fields.createDiv({ cls: "nexus-column-slot-row" });
+				// Nested row inside a stacked sub-slot column
+				if (!Array.isArray(currentSlot) && typeof currentSlot === "object") {
+					this.renderNestedRowEditor(container, currentSlot, async () => {
+						const arr = row.slots[i] as RowLayoutSlot[];
+						arr.splice(si, 1);
+						if (arr.length === 1) row.slots[i] = arr[0];
+						await this.saveAndRefresh();
+					});
+					continue;
+				}
+
+				const subKey = isSubSlot ? `${i}-${si}` : String(i);
+
+				const slotRow = container.createDiv({ cls: "nexus-column-slot-row" });
 				slotRow.style.display = "flex";
 				slotRow.style.alignItems = "center";
 				slotRow.style.gap = "8px";
@@ -1061,9 +1177,9 @@ export class NexusSettingTab extends PluginSettingTab {
 				slotSelect.addEventListener("change", async () => {
 					const newVal = slotSelect.value as ContentSlotType;
 					if (isSubSlot) {
-						(this.plugin.settings.rowLayouts[index].slots[i] as ContentSlotType[])[si] = newVal;
+						(row.slots[i] as RowLayoutSlot[])[si] = newVal;
 					} else {
-						this.plugin.settings.rowLayouts[index].slots[i] = newVal;
+						row.slots[i] = newVal;
 					}
 					await this.saveAndRefresh();
 				});
@@ -1073,18 +1189,18 @@ export class NexusSettingTab extends PluginSettingTab {
 					const removeBtn = slotRow.createEl("button", { cls: "nexus-row-editor-card-btn" });
 					setIcon(removeBtn, "x");
 					removeBtn.addEventListener("click", async () => {
-						const layoutRef = this.plugin.settings.rowLayouts[index];
-						const arr = layoutRef.slots[i] as ContentSlotType[];
+						const arr = row.slots[i] as RowLayoutSlot[];
 						const oldLen = arr.length;
 						arr.splice(si, 1);
 						if (arr.length === 1) {
-							layoutRef.slots[i] = arr[0];
+							row.slots[i] = arr[0];
 						}
 						// Shift overrides down so configs follow their slots (#1/#2)
 						for (const map of [
-							layoutRef.slotHeadings,
-							layoutRef.vaultListSlots,
-							layoutRef.dividerSlots,
+							row.slotHeadings,
+							row.vaultListSlots,
+							row.fileTypeListSlots,
+							row.dividerSlots,
 						]) {
 							if (!map) continue;
 							for (let p = si; p < arr.length; p++) {
@@ -1106,14 +1222,14 @@ export class NexusSettingTab extends PluginSettingTab {
 				// Heading config fields (when slot is "heading")
 				if (currentSlot === "heading") {
 					this.renderHeadingConfigEditor(
-						fields,
+						container,
 						subKey,
 						isSubSlot,
 						() => {
-							return (this.plugin.settings.rowLayouts[index].slotHeadings || {})[subKey];
+							return (row.slotHeadings || {})[subKey];
 						},
 						async (patch) => {
-							const h = (this.plugin.settings.rowLayouts[index].slotHeadings ??= {});
+							const h = (row.slotHeadings ??= {});
 							h[subKey] = { ...(h[subKey] || { text: "Section" }), ...patch };
 							await this.plugin.saveSettings();
 						},
@@ -1123,11 +1239,24 @@ export class NexusSettingTab extends PluginSettingTab {
 				// Vault list selector (when slot is "vault-activity")
 				if (currentSlot === "vault-activity") {
 					this.addVaultListSelector(
-						fields,
+						container,
 						isSubSlot ? "68px" : "8px",
-						this.plugin.settings.rowLayouts[index].vaultListSlots?.[subKey] || "",
+						row.vaultListSlots?.[subKey] || "",
 						async (value) => {
-							(this.plugin.settings.rowLayouts[index].vaultListSlots ??= {})[subKey] = value;
+							(row.vaultListSlots ??= {})[subKey] = value;
+							await this.plugin.saveSettings();
+						},
+					);
+				}
+
+				// File-type list selector (when slot is "filetypes")
+				if (currentSlot === "filetypes") {
+					this.addFileTypeListSelector(
+						container,
+						isSubSlot ? "68px" : "8px",
+						row.fileTypeListSlots?.[subKey] || "",
+						async (value) => {
+							(row.fileTypeListSlots ??= {})[subKey] = value;
 							await this.plugin.saveSettings();
 						},
 					);
@@ -1136,11 +1265,11 @@ export class NexusSettingTab extends PluginSettingTab {
 				// Divider label input (when slot is "divider")
 				if (currentSlot === "divider") {
 					this.addDividerLabelInput(
-						fields,
+						container,
 						isSubSlot ? "68px" : "8px",
-						this.plugin.settings.rowLayouts[index].dividerSlots?.[subKey] || "",
+						row.dividerSlots?.[subKey] || "",
 						async (value) => {
-							(this.plugin.settings.rowLayouts[index].dividerSlots ??= {})[subKey] = value;
+							(row.dividerSlots ??= {})[subKey] = value;
 							await this.plugin.saveSettings();
 						},
 					);
@@ -1148,19 +1277,23 @@ export class NexusSettingTab extends PluginSettingTab {
 			}
 
 			// "+ Add Slot" button per column
-			const addSlotRow = fields.createDiv({ cls: "nexus-column-slot-row" });
+			const addSlotRow = container.createDiv({ cls: "nexus-column-slot-row" });
 			addSlotRow.style.paddingLeft = isSubSlot ? "68px" : "8px";
 			const addSlotBtn = addSlotRow.createEl("button", { cls: "nexus-row-editor-card-btn" });
 			addSlotBtn.textContent = "+ Add Slot";
 			addSlotBtn.addEventListener("click", async () => {
-				const layoutRef = this.plugin.settings.rowLayouts[index];
-				const current = layoutRef.slots[i];
+				const current = row.slots[i];
 				if (Array.isArray(current)) {
 					current.push("none");
 				} else {
-					layoutRef.slots[i] = [current, "none"];
+					row.slots[i] = [current, "none"];
 					// Migrate the single-slot config to the first sub-slot key (#3)
-					for (const map of [layoutRef.slotHeadings, layoutRef.vaultListSlots, layoutRef.dividerSlots]) {
+					for (const map of [
+						row.slotHeadings,
+						row.vaultListSlots,
+						row.fileTypeListSlots,
+						row.dividerSlots,
+					]) {
 						if (!map) continue;
 						if (String(i) in map) {
 							map[`${i}-0`] = map[String(i)];
@@ -1170,7 +1303,112 @@ export class NexusSettingTab extends PluginSettingTab {
 				}
 				await this.saveAndRefresh();
 			});
+
+			// "+ Add Nested Row" button per column
+			const addNestedRow = container.createDiv({ cls: "nexus-column-slot-row" });
+			addNestedRow.style.paddingLeft = isSubSlot ? "68px" : "8px";
+			const addNestedBtn = addNestedRow.createEl("button", { cls: "nexus-row-editor-card-btn" });
+			addNestedBtn.textContent = "+ Add Nested Row";
+			addNestedBtn.addEventListener("click", async () => {
+				const current = row.slots[i];
+				const newRow = this.newNestedRow();
+				if (Array.isArray(current)) {
+					current.push(newRow);
+				} else {
+					row.slots[i] = [current, newRow];
+				}
+				await this.saveAndRefresh();
+			});
 		}
+	}
+
+	/**
+	 * Editor for a nested {@link RowLayoutEntry} embedded in a column slot.
+	 * Shows name/columns/proportion/align plus its own per-column slot editors.
+	 */
+	private renderNestedRowEditor(
+		container: HTMLElement,
+		nested: RowLayoutEntry,
+		onRemove: () => Promise<void>,
+	): void {
+		const wrap = container.createDiv({ cls: "nexus-row-editor-nested" });
+
+		const header = wrap.createDiv({ cls: "nexus-row-editor-nested-header" });
+		header.createEl("strong", { text: "Nested Row" });
+		const removeBtn = header.createEl("button", { cls: "nexus-row-editor-card-btn" });
+		setIcon(removeBtn, "x");
+		removeBtn.addEventListener("click", async (e) => {
+			e.stopPropagation();
+			await onRemove();
+		});
+
+		if (!nested.slots) nested.slots = [];
+
+		const nameSetting = new Setting(wrap);
+		nameSetting.setName("Nested name");
+		nameSetting.addText((text) =>
+			text
+				.setPlaceholder("Nested row")
+				.setValue(nested.name)
+				.onChange(async (value) => {
+					nested.name = value || "Nested Row";
+					await this.plugin.saveSettings();
+				}),
+		);
+
+		const colSetting = new Setting(wrap);
+		colSetting.setName("Columns");
+		colSetting.addSlider((slider) => {
+			const applyColumns = (value: number) => {
+				const safeCols = Number.isFinite(value) && value >= 1 ? value : 2;
+				nested.columns = safeCols;
+				const part = Math.floor(100 / safeCols);
+				const newParts: number[] = [];
+				for (let j = 0; j < safeCols - 1; j++) newParts.push(part);
+				newParts.push(100 - part * (safeCols - 1));
+				nested.proportion = newParts.join("/");
+				const currentSlots = nested.slots || [];
+				while (currentSlots.length < safeCols) currentSlots.push("none");
+				while (currentSlots.length > safeCols) currentSlots.pop();
+				this.pruneRowLayoutOverrides(nested);
+			};
+			slider
+				.setLimits(1, 4, 1)
+				.setValue(nested.columns)
+				.setDynamicTooltip()
+				.onChange(async (value) => {
+					applyColumns(value);
+					await this.saveAndRefresh();
+				});
+		});
+
+		const propSetting = new Setting(wrap);
+		propSetting.setName("Proportion");
+		propSetting.setDesc("Slash-separated widths (e.g. 50/50)");
+		propSetting.addText((text) =>
+			text
+				.setPlaceholder("50/50")
+				.setValue(nested.proportion)
+				.onChange(async (value) => {
+					nested.proportion = value;
+					await this.plugin.saveSettings();
+				}),
+		);
+
+		const alignSetting = new Setting(wrap);
+		alignSetting.setName("Vertical align");
+		alignSetting.addDropdown((dropdown) => {
+			dropdown.addOption("top", "Top");
+			dropdown.addOption("center", "Center");
+			dropdown.addOption("stretch", "Stretch");
+			dropdown.setValue(nested.align);
+			dropdown.onChange(async (value) => {
+				nested.align = value as "top" | "center" | "stretch";
+				await this.plugin.saveSettings();
+			});
+		});
+
+		this.renderRowSlotEditors(wrap, nested, true);
 	}
 
 	private renderColumnLayoutCard(
@@ -1317,7 +1555,12 @@ export class NexusSettingTab extends PluginSettingTab {
 				const oldLen = layoutRef.slots.length;
 				layoutRef.slots.splice(i, 1);
 				// Shift overrides down so configs follow their slots (#3)
-				for (const map of [layoutRef.slotHeadings, layoutRef.vaultListSlots, layoutRef.dividerSlots]) {
+				for (const map of [
+					layoutRef.slotHeadings,
+					layoutRef.vaultListSlots,
+					layoutRef.fileTypeListSlots,
+					layoutRef.dividerSlots,
+				]) {
 					if (!map) continue;
 					for (let p = i; p < layoutRef.slots.length; p++) {
 						const from = String(p + 1);
@@ -1356,6 +1599,19 @@ export class NexusSettingTab extends PluginSettingTab {
 					this.plugin.settings.columnLayouts[index].vaultListSlots?.[String(i)] || "",
 					async (value) => {
 						(this.plugin.settings.columnLayouts[index].vaultListSlots ??= {})[String(i)] = value;
+						await this.plugin.saveSettings();
+					},
+				);
+			}
+
+			// File-type list selector (when slot is "filetypes")
+			if (colSlots[i] === "filetypes") {
+				this.addFileTypeListSelector(
+					fields,
+					"68px",
+					this.plugin.settings.columnLayouts[index].fileTypeListSlots?.[String(i)] || "",
+					async (value) => {
+						(this.plugin.settings.columnLayouts[index].fileTypeListSlots ??= {})[String(i)] = value;
 						await this.plugin.saveSettings();
 					},
 				);
@@ -1476,9 +1732,6 @@ export class NexusSettingTab extends PluginSettingTab {
 		// ── Stats ──────────────────────────────────────
 		this.renderStatsSection(containerEl);
 
-		// ── Search ─────────────────────────────────────
-		this.renderSearchSection(containerEl);
-
 		// ── Vault Activity ──────────────────────────────
 		this.renderVaultActivitySection(containerEl);
 
@@ -1570,6 +1823,20 @@ export class NexusSettingTab extends PluginSettingTab {
 					);
 					if (!validVl) {
 						new Notice("Invalid settings file: malformed vault list entries");
+						return;
+					}
+				}
+				if (data.fileTypeLists && !Array.isArray(data.fileTypeLists)) {
+					new Notice("Invalid settings file: fileTypeLists must be an array");
+					return;
+				}
+				if (data.fileTypeLists) {
+					const validFt = data.fileTypeLists.every(
+						(v: Record<string, unknown>) =>
+							v && typeof v.name === "string" && (v.height === undefined || typeof v.height === "number"),
+					);
+					if (!validFt) {
+						new Notice("Invalid settings file: malformed file-type list entries");
 						return;
 					}
 				}
@@ -1790,7 +2057,8 @@ export class NexusSettingTab extends PluginSettingTab {
 	}
 
 	private renderAsciiPreview(container: HTMLElement): void {
-		const preview = renderFiglet(this.plugin.settings.headerText || "PREVIEW");
+		const font = getFontByName(this.plugin.settings.asciiDefaultFont);
+		const preview = renderFiglet(this.plugin.settings.headerText || "PREVIEW", { font });
 		const pre = container.createEl("pre", { text: preview, cls: "ascii-header-preview" });
 		pre.style.color = this.plugin.settings.asciiDefaultColor;
 		pre.style.setProperty("--nexus-ascii-size", String(this.plugin.settings.asciiDefaultSize));
@@ -2255,35 +2523,6 @@ export class NexusSettingTab extends PluginSettingTab {
 		return lines.join("\n");
 	}
 
-	private renderSearchSection(containerEl: HTMLElement): void {
-		this.renderComponentCard(
-			containerEl,
-			"search",
-			"Search",
-			"Vault-wide search bar",
-			this.plugin.settings.showSearch,
-			null,
-			async (value) => {
-				this.plugin.settings.showSearch = value;
-				await this.plugin.saveSettings();
-			},
-			(body) => {
-				new Setting(body)
-					.setName("Search default")
-					.setDesc("Default search scope")
-					.addDropdown((dropdown) => {
-						dropdown.addOption("vault", "Vault");
-						dropdown.addOption("cards", "Cards");
-						dropdown.setValue(this.plugin.settings.searchDefault);
-						dropdown.onChange(async (value) => {
-							this.plugin.settings.searchDefault = value as "vault" | "cards";
-							await this.plugin.saveSettings();
-						});
-					});
-			},
-		);
-	}
-
 	private renderVaultActivitySection(containerEl: HTMLElement): void {
 		this.renderComponentCard(
 			containerEl,
@@ -2388,7 +2627,19 @@ export class NexusSettingTab extends PluginSettingTab {
 			"Quick Links",
 			"Links to open instantly",
 			this.plugin.settings.showQuickLinks,
-			null,
+			{
+				show: this.plugin.settings.showQuickLinksDivider,
+				label: this.plugin.settings.quickLinksDividerLabel,
+				labelPlaceholder: "Quick Links",
+				onShow: async (value) => {
+					this.plugin.settings.showQuickLinksDivider = value;
+					await this.plugin.saveSettings();
+				},
+				onLabel: async (value) => {
+					this.plugin.settings.quickLinksDividerLabel = value || "Quick Links";
+					await this.plugin.saveSettings();
+				},
+			},
 			async (value) => {
 				this.plugin.settings.showQuickLinks = value;
 				await this.plugin.saveSettings();
@@ -2533,16 +2784,6 @@ export class NexusSettingTab extends PluginSettingTab {
 					.addToggle((toggle) =>
 						toggle.setValue(this.plugin.settings.activityTimelineShowDate).onChange(async (value) => {
 							this.plugin.settings.activityTimelineShowDate = value;
-							await this.plugin.saveSettings();
-						}),
-					);
-
-				new Setting(listGroup)
-					.setName("Show filter chips")
-					.setDesc("Show interactive action filter chips above the list")
-					.addToggle((toggle) =>
-						toggle.setValue(this.plugin.settings.activityTimelineShowChips).onChange(async (value) => {
-							this.plugin.settings.activityTimelineShowChips = value;
 							await this.plugin.saveSettings();
 						}),
 					);
@@ -2723,7 +2964,7 @@ export class NexusSettingTab extends PluginSettingTab {
 			containerEl,
 			"file-types",
 			"File Types",
-			"Horizontal bar chart of vault file types",
+			"Stacked bar of vault file composition",
 			this.plugin.settings.showFileTypeChart,
 			{
 				show: this.plugin.settings.showFileTypeChartDivider,
@@ -2743,17 +2984,40 @@ export class NexusSettingTab extends PluginSettingTab {
 				await this.plugin.saveSettings();
 			},
 			(body) => {
-				new Setting(body)
-					.setName("Max types")
-					.setDesc("Maximum file types to display (3–15)")
+				const legendGroup = this.renderSubgroup(body, "Legend");
+				new Setting(legendGroup)
+					.setName("Maximum legend height")
+					.setDesc("Max height of the extension legend before it scrolls (80–400px).")
 					.addSlider((slider) =>
 						slider
-							.setLimits(3, 15, 1)
-							.setValue(this.plugin.settings.fileTypeChartMax)
+							.setLimits(80, 400, 10)
+							.setValue(this.plugin.settings.fileTypeLegendHeight)
 							.setDynamicTooltip()
 							.onChange(async (value) => {
-								this.plugin.settings.fileTypeChartMax = value;
+								this.plugin.settings.fileTypeLegendHeight = value;
 								await this.plugin.saveSettings();
+							}),
+					);
+
+				const listsGroup = this.renderSubgroup(body, "File type lists");
+				this.plugin.settings.fileTypeLists.forEach((ft, i) => {
+					this.renderFileTypeListEntry(listsGroup, ft, i);
+				});
+
+				new Setting(listsGroup)
+					.setName("Add file-type list")
+					.setDesc("Add a new named file-type preset for use in layout slots.")
+					.addButton((btn) =>
+						btn
+							.setButtonText("+ Add List")
+							.setCta()
+							.onClick(async () => {
+								this.plugin.settings.fileTypeLists.push({
+									name: "New List",
+									path: "",
+									label: "",
+								});
+								await this.saveAndRefresh();
 							}),
 					);
 			},
@@ -2802,6 +3066,26 @@ export class NexusSettingTab extends PluginSettingTab {
 					.addToggle((toggle) =>
 						toggle.setValue(this.plugin.settings.taskSummaryShowList).onChange(async (value) => {
 							this.plugin.settings.taskSummaryShowList = value;
+							await this.plugin.saveSettings();
+						}),
+					);
+
+				new Setting(viewGroup)
+					.setName("Show due dates")
+					.setDesc("Group unchecked tasks by due date and highlight overdue/today tasks")
+					.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.taskSummaryShowDue).onChange(async (value) => {
+							this.plugin.settings.taskSummaryShowDue = value;
+							await this.plugin.saveSettings();
+						}),
+					);
+
+				new Setting(viewGroup)
+					.setName("Inline check-off")
+					.setDesc("Allow checking tasks off directly from the dashboard")
+					.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.taskSummaryCheckable).onChange(async (value) => {
+							this.plugin.settings.taskSummaryCheckable = value;
 							await this.plugin.saveSettings();
 						}),
 					);
@@ -3038,70 +3322,6 @@ export class NexusSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
-
-			// ── Icon picker (searchable, commits typed value) ──────
-			const iconSetting = new Setting(containerEl)
-				.setName("Icon")
-				.setDesc("Type to search, click to select");
-			const iconWrapper = iconSetting.settingEl.createDiv({ cls: "nexus-icon-picker-wrapper" });
-			const iconRow = iconWrapper.createDiv({ cls: "nexus-icon-picker-row" });
-			const iconPreview = iconRow.createDiv({ cls: "nexus-icon-picker-preview" });
-			iconPreview.innerHTML = SMALL_ICONS[link.icon] || SMALL_ICONS["Link"] || "";
-			const iconInput = iconRow.createEl("input", {
-				cls: "nexus-icon-picker-input",
-				attr: { type: "text", placeholder: "Search icons..." },
-			});
-			iconInput.value = link.icon;
-			const iconGrid = iconWrapper.createDiv({ cls: "nexus-icon-picker-grid" });
-
-			const renderLinkIconGrid = (filter: string) => {
-				iconGrid.empty();
-				const lower = filter.toLowerCase();
-				const matches = ICON_NAMES.filter((name) => name.toLowerCase().includes(lower));
-				for (const name of matches) {
-					const btn = iconGrid.createDiv({ cls: "nexus-icon-picker-item" });
-					if (name === iconInput.value) btn.classList.add("nexus-icon-picker-item-active");
-					btn.innerHTML = SMALL_ICONS[name] || "";
-					btn.createEl("span", { text: name, cls: "nexus-icon-picker-label" });
-					btn.addEventListener("click", () => {
-						iconInput.value = name;
-						iconPreview.innerHTML = SMALL_ICONS[name] || SMALL_ICONS["Link"] || "";
-						this.plugin.settings.quickLinks[index].icon = name;
-						void this.plugin.saveSettings();
-						iconGrid
-							.querySelectorAll(".nexus-icon-picker-item")
-							.forEach((el) => el.classList.remove("nexus-icon-picker-item-active"));
-						btn.classList.add("nexus-icon-picker-item-active");
-					});
-				}
-				if (matches.length === 0) {
-					iconGrid.createEl("div", { text: "No icons found", cls: "nexus-icon-picker-empty" });
-				}
-			};
-
-			renderLinkIconGrid("");
-			iconInput.addEventListener("input", () => renderLinkIconGrid(iconInput.value));
-			iconInput.addEventListener("focus", () => {
-				iconGrid.classList.add("nexus-icon-picker-grid-open");
-				renderLinkIconGrid(iconInput.value);
-			});
-			iconInput.addEventListener("blur", () => {
-				setTimeout(() => {
-					iconGrid.classList.remove("nexus-icon-picker-grid-open");
-				}, 200);
-			});
-			this.addIconPickerCommitBlur(iconInput, iconPreview, (value) => {
-				this.plugin.settings.quickLinks[index].icon = value;
-				void this.plugin.saveSettings();
-			});
-			iconInput.addEventListener("keydown", (e) => {
-				if (e.key === "Escape") iconInput.blur();
-				if (e.key === "Enter") {
-					this.plugin.settings.quickLinks[index].icon = iconInput.value;
-					void this.plugin.saveSettings();
-					iconInput.blur();
-				}
-			});
 		});
 
 		// "+ Add Link" button
@@ -3122,7 +3342,6 @@ export class NexusSettingTab extends PluginSettingTab {
 		this.plugin.settings.quickLinks.push({
 			label: "New Link",
 			url: "https://example.com",
-			icon: "Link",
 		});
 		await this.saveAndRefresh();
 	}
@@ -3168,6 +3387,46 @@ export class NexusSettingTab extends PluginSettingTab {
 		});
 	}
 
+	// ── File-Type List Entry ────────────────────────────────
+
+	renderFileTypeListEntry(containerEl: HTMLElement, ft: FileTypeListEntry, index: number): void {
+		const entry = containerEl.createDiv({ cls: "nexus-vault-list-entry" });
+
+		const head = entry.createDiv({ cls: "nexus-vault-list-entry-head" });
+		head.createSpan({ cls: "nexus-vault-list-entry-name", text: ft.name || "Untitled" });
+		const removeBtn = head.createEl("button", {
+			cls: "nexus-settings-moc-btn--delete",
+			attr: { "aria-label": "Remove" },
+		});
+		setIcon(removeBtn, "trash");
+		removeBtn.addEventListener("click", async () => {
+			new ConfirmModal(
+				this.app,
+				`Remove "${ft.name}"?`,
+				"This file-type list will be removed from the dashboard.",
+				async () => {
+					this.plugin.settings.fileTypeLists.splice(index, 1);
+					await this.saveAndRefresh();
+				},
+			).open();
+		});
+
+		const grid = entry.createDiv({ cls: "nexus-vault-list-entry-grid" });
+
+		this.addVaultListField(grid, "Name", ft.name, (value) => {
+			this.plugin.settings.fileTypeLists[index].name = value;
+		});
+		this.addVaultListField(grid, "Path", ft.path, (value) => {
+			this.plugin.settings.fileTypeLists[index].path = value;
+		});
+		this.addVaultListField(grid, "Label", ft.label, (value) => {
+			this.plugin.settings.fileTypeLists[index].label = value;
+		});
+		this.addVaultListNumberField(grid, "Max Height", ft.height, (value) => {
+			this.plugin.settings.fileTypeLists[index].height = value;
+		});
+	}
+
 	private addVaultListField(
 		parent: HTMLElement,
 		label: string,
@@ -3183,6 +3442,34 @@ export class NexusSettingTab extends PluginSettingTab {
 		let timer: ReturnType<typeof setTimeout> | null = null;
 		input.addEventListener("input", () => {
 			onValue(input.value);
+			if (timer) clearTimeout(timer);
+			timer = setTimeout(() => {
+				void this.plugin.saveSettings();
+			}, 200);
+		});
+	}
+
+	private addVaultListNumberField(
+		parent: HTMLElement,
+		label: string,
+		value: number | undefined,
+		onValue: (value: number | undefined) => void,
+	): void {
+		const field = parent.createDiv({ cls: "nexus-vault-list-entry-field" });
+		field.createEl("label", { cls: "nexus-vault-list-entry-field-label", text: label });
+		const input = field.createEl("input", {
+			cls: "nexus-vault-list-entry-input",
+			attr: { type: "number", min: "0", value: value != null ? String(value) : "" },
+		});
+		let timer: ReturnType<typeof setTimeout> | null = null;
+		input.addEventListener("input", () => {
+			const raw = input.value.trim();
+			let next: number | undefined;
+			if (raw !== "") {
+				const parsed = parseInt(raw, 10);
+				next = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+			}
+			onValue(next);
 			if (timer) clearTimeout(timer);
 			timer = setTimeout(() => {
 				void this.plugin.saveSettings();

@@ -19,7 +19,6 @@ function makeOpts(overrides: Partial<TimelineOptions> = {}): TimelineOptions {
 		excludeFolders: [],
 		excludeExt: [],
 		types: [],
-		chipMatch: () => true,
 		count: 20,
 		...overrides,
 	};
@@ -51,30 +50,6 @@ describe("buildTimelineEvents", () => {
 		};
 		const result = buildTimelineEvents(source, makeOpts({ types: ["created"] }));
 		expect(result.map((e) => e.action)).toEqual(["created"]);
-	});
-
-	it("filters by chip predicate", () => {
-		const source: TimelineSource = {
-			...baseSource,
-			log: [
-				{ time: now, action: "created", path: "a.md" },
-				{ time: now - 10, action: "modified", path: "b.md" },
-			],
-		};
-		const result = buildTimelineEvents(source, makeOpts({ chipMatch: (a) => a === "created" }));
-		expect(result.map((e) => e.action)).toEqual(["created"]);
-	});
-
-	it("does not backfill when the chip filter excludes modified", () => {
-		const source: TimelineSource = {
-			...baseSource,
-			files: [{ path: "recent.md", extension: "md", mtime: now - 5 }],
-		};
-		const result = buildTimelineEvents(
-			source,
-			makeOpts({ chipMatch: (a) => a === "created", count: 5 }),
-		);
-		expect(result).toEqual([]);
 	});
 
 	it("does not backfill when types whitelist excludes modified", () => {

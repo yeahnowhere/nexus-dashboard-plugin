@@ -93,6 +93,9 @@
   font-size: 0.78rem;
   font-weight: 600;
   white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: center;
   cursor: pointer;
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -481,6 +484,15 @@
 
   .nexus-stat-card {
     padding: 4px 10px;
+  }
+
+  .nexus-stat-new-note {
+    padding: 4px 10px;
+  }
+
+  .nexus-stat-new-note svg {
+    width: 12px;
+    height: 12px;
   }
 
   .nexus-stat-num {
@@ -1176,164 +1188,6 @@
   color: var(--text-on-accent);
 }
 
-.nexus-link-pill-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 6px;
-  line-height: 1;
-}
-
-.nexus-link-pill-icon svg {
-  width: 12px;
-  height: 12px;
-  display: block;
-}
-
-/* ============================================================
-   Nexus Search — Vault quick navigation
-   ============================================================ */
-
-.nexus-search {
-  position: relative;
-  margin-bottom: 0;
-  width: 100%;
-}
-
-.nexus-search-input-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.nexus-search-input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 6px 28px 6px 10px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  background: var(--background-secondary);
-  color: var(--text-normal);
-  font-size: 0.78rem;
-  font-family: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.nexus-search-input:focus {
-  border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 15%, transparent);
-  outline: none;
-}
-
-.nexus-search-input::placeholder {
-  color: var(--text-muted);
-}
-
-.nexus-search-clear {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--background-modifier-border);
-  color: var(--text-muted);
-  font-size: 0.6rem;
-  cursor: pointer;
-  line-height: 1;
-  transition: background 0.12s ease;
-}
-
-.nexus-search-clear:hover {
-  background: var(--text-muted);
-  color: var(--background-primary);
-}
-
-.nexus-search-clear.visible {
-  display: flex;
-}
-
-.nexus-search-count {
-  font-size: 0.65rem;
-  color: var(--text-faint);
-  margin-top: 4px;
-  min-height: 1em;
-}
-
-.nexus-search-no-results {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  padding: 8px 0;
-  text-align: center;
-}
-
-.nexus-search-results {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  max-height: 300px;
-  overflow-y: auto;
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px var(--background-modifier-box-shadow, rgba(0, 0, 0, 0.15));
-  margin-top: 4px;
-}
-
-.nexus-search-result {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 10px;
-  cursor: pointer;
-  transition: background 0.1s ease;
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.nexus-search-result:last-child {
-  border-bottom: none;
-}
-
-.nexus-search-result:hover,
-.nexus-search-result.selected {
-  background: var(--background-modifier-hover);
-}
-
-.nexus-search-result.selected {
-  outline: 1px solid var(--interactive-accent);
-  outline-offset: -1px;
-}
-
-.nexus-search-result-name {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-normal);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.nexus-search-result-name mark {
-  background: color-mix(in srgb, var(--interactive-accent) 25%, transparent);
-  color: inherit;
-  border-radius: 2px;
-  padding: 0 1px;
-}
-
-.nexus-search-result-path {
-  font-size: 0.65rem;
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* ============================================================
    Nexus Settings Tabs
    ============================================================ */
@@ -1393,6 +1247,102 @@
 
 select.dropdown option:disabled {
   color: var(--text-faint);
+}
+
+/* ============================================================
+   Settings UI — Presets (preloaded layout templates)
+   ============================================================ */
+.nexus-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.nexus-preset-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nexus-preset-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nexus-preset-name {
+  margin: 0;
+  font-size: 1.05em;
+  line-height: 1.3;
+}
+
+.nexus-preset-desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+
+.nexus-preset-schematic {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.nexus-preset-row {
+  display: flex;
+  gap: 4px;
+  min-height: 26px;
+}
+
+.nexus-preset-col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px;
+  border-radius: 5px;
+  background: var(--background-modifier-hover);
+}
+
+.nexus-preset-col-label {
+  display: block;
+  font-size: 0.66em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+
+.nexus-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.nexus-preset-chip {
+  font-size: 0.72em;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--background-modifier-hover);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.nexus-preset-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* ============================================================
@@ -1594,6 +1544,36 @@ select.dropdown option:disabled {
   border-top: 1px solid var(--background-modifier-border);
 }
 
+/* Nested row editor (rows within rows) */
+.nexus-row-editor-nested {
+  margin: 8px 0 8px 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--interactive-accent);
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+.nexus-row-editor-nested-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 4px;
+}
+
+.nexus-row-editor-nested-header strong {
+  color: var(--interactive-accent);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.nexus-row-editor-nested .nexus-col-slot-heading:first-child {
+  border-top: none;
+}
+
 /* ============================================================
    Mobile Responsive — New components
    ============================================================ */
@@ -1740,6 +1720,18 @@ select.dropdown option:disabled {
   font-size: 0.55rem;
   color: var(--text-faint);
   margin: 0 2px;
+}
+
+.nexus-heatmap-cell-today {
+  outline: 1px solid var(--interactive-accent);
+}
+
+.nexus-heatmap-summary {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 5px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ============================================================
@@ -1890,36 +1882,6 @@ select.dropdown option:disabled {
   padding: 0.5rem 3px;
 }
 
-.nexus-timeline-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 0.5rem;
-}
-
-.nexus-timeline-chips .nexus-chip {
-  font-size: 0.62rem;
-  font-family: inherit;
-  padding: 1px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--background-modifier-border);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.1s ease;
-}
-
-.nexus-timeline-chips .nexus-chip:hover {
-  border-color: var(--interactive-accent);
-  color: var(--text-normal);
-}
-
-.nexus-timeline-chips .nexus-chip.is-active {
-  background: var(--interactive-accent);
-  border-color: var(--interactive-accent);
-  color: var(--text-on-accent);
-}
-
 .nexus-timeline-more {
   display: block;
   margin: 0.5rem auto 0;
@@ -2012,70 +1974,99 @@ select.dropdown option:disabled {
   font-weight: 500;
 }
 
+.nexus-clock-tz {
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  margin-top: 2px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ============================================================
-   Nexus File Types — Horizontal bar chart
+   Nexus File Types — Stacked composition bar
    ============================================================ */
 
 .nexus-filetypes {
+  /* Fixed vivid palette — visible on both light and dark backgrounds.
+     Deliberately avoids black/white/gray so no extension ever looks
+     invisible or blends into the card background. */
+  --nexus-ft-0: #4f9dff;
+  --nexus-ft-1: #b07cff;
+  --nexus-ft-2: #37c870;
+  --nexus-ft-3: #ff9a3d;
+  --nexus-ft-4: #ff5f56;
+  --nexus-ft-5: #00c8b3;
+  --nexus-ft-6: #e0a800;
+  --nexus-ft-7: #ff6fa5;
   margin-top: 0.5rem;
 }
 
-.nexus-filetypes-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 4px;
-  border-radius: 6px;
-  transition: background 0.1s ease;
-}
-
-.nexus-filetypes-row:hover {
-  background: var(--background-modifier-hover);
-}
-
-.nexus-filetypes-ext {
-  font-family: "JetBrains Mono NL", "Fira Code", monospace;
-  font-size: 0.72rem;
+.nexus-filetypes-total {
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-normal);
-  min-width: 52px;
-  text-align: right;
+  margin-bottom: 0.3rem;
 }
 
-.nexus-filetypes-count {
-  font-family: "JetBrains Mono NL", "Fira Code", monospace;
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  min-width: 32px;
-  text-align: right;
-}
-
-.nexus-filetypes-bar-track {
-  flex: 1;
-  height: 10px;
-  background: var(--background-secondary);
-  border-radius: 4px;
+.nexus-filetypes-bar {
+  display: flex;
+  width: 100%;
+  height: 14px;
+  border-radius: 6px;
   overflow: hidden;
 }
 
-.nexus-filetypes-bar-fill {
+.nexus-filetypes-bar-segment {
   height: 100%;
-  background: var(--interactive-accent);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-  opacity: 0.8;
+  min-width: 0;
 }
 
-.nexus-filetypes-row:nth-child(1) .nexus-filetypes-bar-fill { opacity: 1; }
-.nexus-filetypes-row:nth-child(2) .nexus-filetypes-bar-fill { opacity: 0.85; }
-.nexus-filetypes-row:nth-child(3) .nexus-filetypes-bar-fill { opacity: 0.7; }
-.nexus-filetypes-row:nth-child(4) .nexus-filetypes-bar-fill { opacity: 0.55; }
-.nexus-filetypes-row:nth-child(5) .nexus-filetypes-bar-fill { opacity: 0.4; }
+.nexus-filetypes-legend {
+  margin-top: 0.4rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
 
-.nexus-filetypes-pct {
-  font-size: 0.68rem;
-  color: var(--text-faint);
+.nexus-filetypes-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nexus-filetypes-legend-dot {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.nexus-filetypes-legend-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nexus-filetypes-legend-count {
+  font-family: "JetBrains Mono NL", "Fira Code", monospace;
+  font-size: 0.85rem;
+  color: var(--text-muted);
   min-width: 30px;
+  text-align: right;
+}
+
+.nexus-filetypes-legend-pct {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  min-width: 32px;
   text-align: right;
 }
 
@@ -2092,6 +2083,10 @@ select.dropdown option:disabled {
     font-size: 0.72rem;
   }
 
+  .nexus-clock-tz {
+    font-size: 0.62rem;
+  }
+
   .nexus-timeline {
     font-size: 0.65rem;
   }
@@ -2106,15 +2101,6 @@ select.dropdown option:disabled {
 
   .nexus-heatmap-day-label {
     font-size: 0.5rem;
-  }
-
-  .nexus-filetypes-ext {
-    min-width: 40px;
-    font-size: 0.65rem;
-  }
-
-  .nexus-filetypes-count {
-    font-size: 0.65rem;
   }
 }
 
@@ -2185,6 +2171,41 @@ select.dropdown option:disabled {
   flex-shrink: 0;
 }
 
+/* Due-date summary strip */
+.nexus-tasks-due-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.nexus-tasks-due-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.nexus-tasks-due-chip-overdue {
+  color: #e03131;
+  background: rgba(224, 49, 49, 0.12);
+}
+
+.theme-light .nexus-tasks-due-chip-overdue {
+  color: #c92a2a;
+  background: rgba(224, 49, 49, 0.1);
+}
+
+.nexus-tasks-due-chip-today {
+  color: #e8590c;
+  background: rgba(232, 89, 12, 0.14);
+}
+
+.theme-light .nexus-tasks-due-chip-today {
+  color: #d9480f;
+  background: rgba(232, 89, 12, 0.12);
+}
+
 /* Task list */
 .nexus-tasks-list {
   display: flex;
@@ -2218,13 +2239,8 @@ select.dropdown option:disabled {
   gap: 0.4rem;
   padding: 0.3rem 0.5rem;
   border-radius: 4px;
-  cursor: pointer;
   transition: background 0.1s ease;
   user-select: none;
-}
-
-.nexus-tasks-group-header:hover {
-  background: var(--background-modifier-hover);
 }
 
 .nexus-tasks-group-name {
@@ -2263,7 +2279,7 @@ select.dropdown option:disabled {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.2rem 0.5rem 0.2rem 1.2rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.6rem;
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.1s ease;
@@ -2274,13 +2290,10 @@ select.dropdown option:disabled {
   background: var(--background-modifier-hover);
 }
 
-.nexus-tasks-item::before {
-  content: "\2610";
+.nexus-tasks-checkbox {
   flex-shrink: 0;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  position: absolute;
-  left: 0.35rem;
+  margin: 0;
+  cursor: pointer;
 }
 
 .nexus-tasks-item-text {
@@ -2288,6 +2301,54 @@ select.dropdown option:disabled {
   min-width: 0;
   font-size: 0.8rem;
   color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nexus-tasks-due {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.nexus-tasks-due-overdue {
+  color: #e03131;
+  background: rgba(224, 49, 49, 0.12);
+}
+
+.theme-light .nexus-tasks-due-overdue {
+  color: #c92a2a;
+  background: rgba(224, 49, 49, 0.1);
+}
+
+.nexus-tasks-due-today {
+  color: #e8590c;
+  background: rgba(232, 89, 12, 0.14);
+}
+
+.theme-light .nexus-tasks-due-today {
+  color: #d9480f;
+  background: rgba(232, 89, 12, 0.12);
+}
+
+.nexus-tasks-due-upcoming {
+  color: var(--text-muted);
+  background: var(--background-secondary);
+}
+
+.nexus-tasks-due-none {
+  display: none;
+}
+
+.nexus-tasks-item-file {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  color: var(--text-faint);
+  max-width: 90px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

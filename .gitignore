@@ -21,6 +21,10 @@ Thumbs.db
 MERGE_LOG.md
 styles.css.map
 
+# Local machine config
+AGENTS.md
+.deploy-path.local
+
 # Vibe Code Orchestrator artifacts
 .vibeskills/
 outputs/

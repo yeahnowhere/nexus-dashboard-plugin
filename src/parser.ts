@@ -8,9 +8,7 @@ import {
 	RowConfig,
 	ColumnConfig,
 	VaultActivityConfig,
-	SearchConfig,
 	StatsBlockConfig,
-	SearchBlockConfig,
 	HeatmapConfig,
 	TimelineConfig,
 	ClockConfig,
@@ -36,7 +34,6 @@ function finalizeLinkItem(partial: Partial<LinkItem>): LinkItem {
 	return {
 		url: partial.url ?? "",
 		label: partial.label,
-		icon: partial.icon,
 		desc: partial.desc,
 	};
 }
@@ -52,7 +49,6 @@ type ParseContext =
 	| "links"
 	| "row"
 	| "column"
-	| "search"
 	| "vault-activity"
 	| "section-divider"
 	| "heatmap"
@@ -87,7 +83,6 @@ export function parseDashboard(raw: string): DashboardConfig {
 	let currentColumn: ColumnConfig | null = null;
 	let columnInsideRow = false;
 	let columnIndent = -1;
-	let currentSearch: SearchConfig | null = null;
 	let currentVaultActivity: VaultActivityConfig | null = null;
 	let currentHeatmap: HeatmapConfig | null = null;
 	let currentTimeline: TimelineConfig | null = null;
@@ -158,7 +153,7 @@ export function parseDashboard(raw: string): DashboardConfig {
 		if (t.startsWith("- ")) {
 			const stripped = t.slice(2);
 			if (
-				/^(header|stats|graph|divider|section|links|row|column|search|vault-activity|filetypes|heatmap|timeline|clock|tasks):/.test(
+				/^(header|stats|graph|divider|section|links|row|column|vault-activity|filetypes|heatmap|timeline|clock|tasks):/.test(
 					stripped,
 				)
 			) {
@@ -314,15 +309,7 @@ export function parseDashboard(raw: string): DashboardConfig {
 			continue;
 		}
 
-		// ── Search block ────────────────────────────────
-		if (t === "search:") {
-			flushCurrent();
-			flushColumn();
-			context = "search";
-			currentSearch = { show: true };
-			continue;
-		}
-		// Leaf blocks (links/vault-activity/heatmap/timeline/clock/filetypes/tasks)
+		// ── Leaf blocks (links/vault-activity/heatmap/timeline/clock/filetypes/tasks) ──
 		// are nestable inside rows/columns. Each starts by flushing any in-progress
 		// section into its container, then either keeps the open column/row slot
 		// open (nesting) or closes the current column for a standalone block.
@@ -497,9 +484,6 @@ export function parseDashboard(raw: string): DashboardConfig {
 						currentColumn.align = kv.value as "left" | "center" | "right" | "stretch";
 				}
 				break;
-			case "search":
-				if (currentSearch) applySearchKV(currentSearch, kv);
-				break;
 			case "heatmap":
 				if (currentHeatmap) applyHeatmapKV(currentHeatmap, kv);
 				break;
@@ -567,7 +551,6 @@ export function parseDashboard(raw: string): DashboardConfig {
 		flushLinks();
 		flushSection();
 		flushDivider();
-		flushSearch();
 		flushVaultActivity();
 		flushHeatmap();
 		flushTimeline();
@@ -688,13 +671,6 @@ export function parseDashboard(raw: string): DashboardConfig {
 		}
 	}
 
-	function flushSearch() {
-		if (currentSearch) {
-			config.search = currentSearch;
-			currentSearch = null;
-		}
-	}
-
 	function flushVaultActivity() {
 		if (currentVaultActivity) {
 			pushBlock(currentVaultActivity);
@@ -769,7 +745,6 @@ function applyLinksKV(links: LinksConfig, kv: { key: string; value: string }) {
 function applyLinkItemKV(item: Partial<LinkItem>, kv: { key: string; value: string }) {
 	if (kv.key === "url") item.url = kv.value;
 	if (kv.key === "label") item.label = kv.value;
-	if (kv.key === "icon") item.icon = kv.value;
 	if (kv.key === "desc") item.desc = kv.value;
 }
 
@@ -777,12 +752,6 @@ function applyRowKV(row: RowConfig, kv: { key: string; value: string }) {
 	if (kv.key === "proportion") row.proportion = kv.value;
 	if (kv.key === "align") row.align = kv.value as "top" | "center" | "stretch";
 	if (kv.key === "gap") row.gap = kv.value;
-}
-
-function applySearchKV(search: SearchConfig, kv: { key: string; value: string }) {
-	if (kv.key === "show") search.show = kv.value === "true";
-	if (kv.key === "default") search.default = kv.value as "vault" | "cards";
-	if (kv.key === "placeholder") search.placeholder = kv.value;
 }
 
 // applyListConfigKV (from utils) handles vault-activity show/count/path/tags
@@ -821,7 +790,6 @@ function applyTimelineKV(timeline: TimelineConfig, kv: { key: string; value: str
 	}
 	if (kv.key === "relative") timeline.relative = kv.value === "true";
 	if (kv.key === "showDate") timeline.showDate = kv.value === "true";
-	if (kv.key === "showChips") timeline.showChips = kv.value === "true";
 	if (kv.key === "showMore") timeline.showMore = kv.value === "true";
 }
 
@@ -836,17 +804,20 @@ function applyClockKV(clock: ClockConfig, kv: { key: string; value: string }) {
 
 function applyFileTypeChartKV(chart: FileTypeChartConfig, kv: { key: string; value: string }) {
 	if (kv.key === "show") chart.show = kv.value === "true";
-	if (kv.key === "max") {
-		const n = parseInt(kv.value, 10);
-		chart.max = Number.isFinite(n) && n > 0 ? n : undefined;
-	}
 	if (kv.key === "label") chart.label = kv.value;
+	if (kv.key === "path") chart.path = kv.value;
+	if (kv.key === "height") {
+		const n = parseInt(kv.value, 10);
+		chart.maxLegendHeight = Number.isFinite(n) && n > 0 ? n : undefined;
+	}
 }
 
 function applyTaskSummaryKV(ts: TaskSummaryConfig, kv: { key: string; value: string }) {
 	if (kv.key === "show") ts.show = kv.value === "true";
 	if (kv.key === "progress") ts.showProgress = kv.value === "true";
 	if (kv.key === "showList") ts.showList = kv.value === "true";
+	if (kv.key === "due") ts.showDue = kv.value === "true";
+	if (kv.key === "checkable") ts.checkable = kv.value === "true";
 	if (kv.key === "count") {
 		const n = parseInt(kv.value, 10);
 		ts.count = Number.isFinite(n) && n > 0 ? n : undefined;
@@ -885,7 +856,7 @@ export function buildDefaultConfig(): DashboardConfig {
 	};
 
 	// Default 2-row, 3-column layout for fresh users:
-	// Row 1: Stats | Clock | Search
+	// Row 1: Stats | Clock
 	// Row 2: Timeline | MOC Cards | Heatmap
 	config.blocks.push(
 		{
@@ -895,7 +866,7 @@ export function buildDefaultConfig(): DashboardConfig {
 			children: [
 				{ kind: "column", children: [{ kind: "stats", config: config.stats } as StatsBlockConfig] },
 				{ kind: "column", children: [] },
-				{ kind: "column", children: [{ kind: "search", config: { show: true } } as SearchBlockConfig] },
+				{ kind: "column", children: [] },
 			],
 		},
 		{

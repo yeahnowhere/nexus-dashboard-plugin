@@ -188,6 +188,37 @@ vault-activity:
 		}
 	});
 
+	it("parses filetypes block with path, label and height", () => {
+		const config = parseDashboard(`
+filetypes:
+  show: true
+  path: Projects
+  label: FILES
+  height: 250
+`);
+		expect(config.blocks).toHaveLength(1);
+		const chart = config.blocks[0];
+		expect(chart.kind).toBe("filetypes");
+		if (chart.kind === "filetypes") {
+			expect(chart.show).toBe(true);
+			expect(chart.path).toBe("Projects");
+			expect(chart.label).toBe("FILES");
+			expect(chart.maxLegendHeight).toBe(250);
+		}
+	});
+
+	it("ignores invalid filetypes height values", () => {
+		const config = parseDashboard(`
+filetypes:
+  height: 0
+`);
+		const chart = config.blocks[0];
+		expect(chart.kind).toBe("filetypes");
+		if (chart.kind === "filetypes") {
+			expect(chart.maxLegendHeight).toBeUndefined();
+		}
+	});
+
 	it("parses multiple vault-activity blocks independently", () => {
 		const config = parseDashboard(`
 vault-activity:
@@ -448,19 +479,6 @@ section:
 		}
 	});
 
-	it("parses search config", () => {
-		const config = parseDashboard(`
-search:
-  show: true
-  default: cards
-  placeholder: Find notes...
-`);
-		expect(config.search).toBeDefined();
-		expect(config.search?.show).toBe(true);
-		expect(config.search?.default).toBe("cards");
-		expect(config.search?.placeholder).toBe("Find notes...");
-	});
-
 	it("handles YAML list prefix", () => {
 		const config = parseDashboard(`
 - section:
@@ -486,7 +504,6 @@ timeline:
   group: file
   relative: true
   showDate: false
-  showChips: true
   showMore: false
 `);
 		expect(config.blocks).toHaveLength(1);
@@ -504,8 +521,30 @@ timeline:
 			expect(timeline.group).toBe("file");
 			expect(timeline.relative).toBe(true);
 			expect(timeline.showDate).toBe(false);
-			expect(timeline.showChips).toBe(true);
 			expect(timeline.showMore).toBe(false);
+		}
+	});
+
+	it("parses tasks block with due + checkable keys", () => {
+		const config = parseDashboard(`
+tasks:
+  show: true
+  showList: false
+  due: true
+  checkable: false
+  count: 5
+  label: TODO
+`);
+		expect(config.blocks).toHaveLength(1);
+		const tasks = config.blocks[0];
+		expect(tasks.kind).toBe("tasks");
+		if (tasks.kind === "tasks") {
+			expect(tasks.show).toBe(true);
+			expect(tasks.showList).toBe(false);
+			expect(tasks.showDue).toBe(true);
+			expect(tasks.checkable).toBe(false);
+			expect(tasks.count).toBe(5);
+			expect(tasks.label).toBe("TODO");
 		}
 	});
 });

@@ -9,7 +9,6 @@ export type DashboardBlock =
 	| ColumnConfig
 	| LinksConfig
 	| StatsBlockConfig
-	| SearchBlockConfig
 	| HeadingBlockConfig
 	| HeatmapConfig
 	| TimelineConfig
@@ -22,7 +21,6 @@ export type DashboardBlock =
  */
 export type ContentSlotType =
 	| "stats"
-	| "search"
 	| "heading"
 	| "moc-cards"
 	| "quick-links"
@@ -42,7 +40,6 @@ export interface DashboardConfig {
 	/** Ordered list of blocks rendered top-to-bottom on the dashboard. */
 	blocks: DashboardBlock[];
 	graph: GraphConfig;
-	search?: SearchConfig;
 }
 
 /** Configuration for the dashboard title header rendered at the top of the view. */
@@ -141,14 +138,12 @@ export interface GraphConfig {
 	exclude: string[];
 }
 
-/** A single external or internal link with optional icon and description. */
+/** A single external or internal link with optional label and description. */
 export interface LinkItem {
 	/** URL to navigate to when the link is clicked. */
 	url: string;
 	/** Display text for the link. Falls back to the URL if omitted. */
 	label?: string;
-	/** Icon identifier or emoji shown beside the link label. */
-	icon?: string;
 	/** Optional short description shown below the link. */
 	desc?: string;
 }
@@ -189,7 +184,6 @@ export interface RowConfig {
 		| SectionConfig
 		| ColumnConfig
 		| StatsBlockConfig
-		| SearchBlockConfig
 		| HeadingBlockConfig
 		| VaultActivityConfig
 		| LinksConfig
@@ -211,6 +205,8 @@ export interface ColumnConfig {
 	spacing?: string;
 	/** Horizontal alignment of children within the column. */
 	align?: "left" | "center" | "right" | "stretch";
+	/** Skip the invisible hover divider that would otherwise be inserted between children. */
+	noDividers?: boolean;
 	/**
 	 * Ordered child blocks rendered top-to-bottom inside this column.
 	 */
@@ -218,7 +214,6 @@ export interface ColumnConfig {
 		| SectionConfig
 		| RowConfig
 		| StatsBlockConfig
-		| SearchBlockConfig
 		| HeadingBlockConfig
 		| VaultActivityConfig
 		| LinksConfig
@@ -230,26 +225,10 @@ export interface ColumnConfig {
 	)[];
 }
 
-/** Configuration for the search bar widget. */
-export interface SearchConfig {
-	/** Whether the search bar is visible on the dashboard. */
-	show: boolean;
-	/** Default search mode when the dashboard loads. */
-	default?: "vault" | "cards";
-	/** Placeholder text shown in the search input. */
-	placeholder?: string;
-}
-
 /** A standalone stats counter block that can be placed anywhere in the layout. */
 export interface StatsBlockConfig {
 	kind: "stats";
 	config: StatsConfig;
-}
-
-/** A standalone search bar block that can be placed anywhere in the layout. */
-export interface SearchBlockConfig {
-	kind: "search";
-	config: SearchConfig;
 }
 
 /** Styling configuration for heading text. */
@@ -347,8 +326,6 @@ export interface TimelineConfig {
 	relative?: boolean;
 	/** Show day separators ("Today", "Yesterday", date). */
 	showDate?: boolean;
-	/** Show interactive action filter chips. */
-	showChips?: boolean;
 	/** Show a "load more" button when entries exceed the count. */
 	showMore?: boolean;
 }
@@ -369,14 +346,16 @@ export interface ClockConfig {
 	label?: string;
 }
 
-/** Configuration for the file-type distribution chart. */
+/** Configuration for the file-type composition bar. */
 export interface FileTypeChartConfig {
 	kind: "filetypes";
 	show: boolean;
-	/** Maximum number of file types to display in the chart. */
-	max?: number;
 	/** Custom heading label displayed above the chart. */
 	label?: string;
+	/** Vault-relative folder path to scope the chart (empty = whole vault). */
+	path?: string;
+	/** Max height (px) of the legend area before it scrolls. */
+	maxLegendHeight?: number;
 }
 
 /** Configuration for the task summary widget. */
@@ -387,6 +366,10 @@ export interface TaskSummaryConfig {
 	showProgress?: boolean;
 	/** Show the scrollable unchecked task list. */
 	showList?: boolean;
+	/** Group unchecked tasks by due date and highlight overdue/today tasks. */
+	showDue?: boolean;
+	/** Allow checking tasks off inline from the dashboard. */
+	checkable?: boolean;
 	/** Maximum number of tasks to display in the list. */
 	count?: number;
 	/** Vault-relative folder path to filter tasks (e.g. "Knowledge/Tasks & Action Management"). */
@@ -417,8 +400,6 @@ export interface QuickLinkEntry {
 	label: string;
 	/** URL to open when the link is clicked. */
 	url: string;
-	/** Icon identifier or emoji shown beside the link. */
-	icon: string;
 }
 
 /**
@@ -444,6 +425,18 @@ export interface ObsidianBookmarkItem {
 	ctime?: number;
 }
 
+/** A named file-type preset scoped to a folder, assignable to layout slots. */
+export interface FileTypeListEntry {
+	/** Display name for this file-type list preset. */
+	name: string;
+	/** Vault-relative path prefix used to scope the chart (empty = whole vault). */
+	path: string;
+	/** Divider label shown above the chart. Empty to hide the divider. */
+	label: string;
+	/** Max legend height (px) for this preset; falls back to the global setting. */
+	height?: number;
+}
+
 /** A vault-list entry representing a filterable collection of vault notes. */
 export interface VaultListEntry {
 	/** Display name for this vault list section. */
@@ -457,6 +450,15 @@ export interface VaultListEntry {
 	/** Divider label shown above this list. Empty to hide the divider. */
 	label: string;
 }
+
+/**
+ * A single slot assignment inside a row layout.
+ * - A plain {@link ContentSlotType} fills the whole column.
+ * - An array stacks multiple slots vertically in one column.
+ * - A {@link RowLayoutEntry} nests a full row layout inside the column,
+ *   allowing arbitrary widget nesting (rows within rows).
+ */
+export type RowLayoutSlot = ContentSlotType | RowLayoutEntry | (ContentSlotType | RowLayoutEntry)[];
 
 /**
  * A named row layout template used in the dashboard builder.
@@ -475,13 +477,16 @@ export interface RowLayoutEntry {
 	align: "top" | "center" | "stretch";
 	/**
 	 * Content slot assignments for each column.
-	 * A nested array places multiple slots inside a single column.
+	 * A nested array stacks multiple slots inside a single column and a
+	 * nested {@link RowLayoutEntry} embeds a full sub-row.
 	 */
-	slots: (ContentSlotType | ContentSlotType[])[];
+	slots: RowLayoutSlot[];
 	/** Per-slot heading overrides keyed by slot identifier. */
 	slotHeadings?: Record<string, HeadingConfig>;
 	/** Maps slot identifiers to vault-list names for vault-list slots. */
 	vaultListSlots?: Record<string, string>;
+	/** Maps slot identifiers to file-type list names for file-types slots. */
+	fileTypeListSlots?: Record<string, string>;
 	/** Maps slot identifiers to divider label overrides for divider slots. */
 	dividerSlots?: Record<string, string>;
 }
@@ -505,6 +510,8 @@ export interface ColumnLayoutEntry {
 	slotHeadings?: Record<string, HeadingConfig>;
 	/** Maps slot identifiers to vault-list names for vault-list slots. */
 	vaultListSlots?: Record<string, string>;
+	/** Maps slot identifiers to file-type list names for file-types slots. */
+	fileTypeListSlots?: Record<string, string>;
 	/** Maps slot identifiers to divider label overrides for divider slots. */
 	dividerSlots?: Record<string, string>;
 }
@@ -585,10 +592,6 @@ export interface NexusSettings {
 	asciiMobileSize: number;
 	/** Horizontal alignment of the ASCII header text. */
 	asciiDefaultAlign: "left" | "center" | "right";
-	/** Whether the search bar is visible on the dashboard. */
-	showSearch: boolean;
-	/** Default search mode when the dashboard loads. */
-	searchDefault: "vault" | "cards";
 	/** Quick-link entries displayed in the quick-links grid. */
 	quickLinks: QuickLinkEntry[];
 	/**
@@ -604,6 +607,8 @@ export interface NexusSettings {
 	columnLayouts: ColumnLayoutEntry[];
 	/** Vault file-list entries displayed on the dashboard. */
 	vaultLists: VaultListEntry[];
+	/** Named file-type presets assignable to dashboard layout slots. */
+	fileTypeLists: FileTypeListEntry[];
 	/** Whether the dashboard header is visible. */
 	showHeader: boolean;
 	/** Whether the MOC cards section is visible. */
@@ -616,6 +621,10 @@ export interface NexusSettings {
 	showQuickLinks: boolean;
 	/** Whether to show Obsidian built-in Bookmarks as a separate links section. */
 	showBookmarksAsLinks: boolean;
+	/** Whether a divider is shown above the quick-links section. */
+	showQuickLinksDivider: boolean;
+	/** Label text for the divider above the quick-links section. */
+	quickLinksDividerLabel: string;
 	/** Whether the heatmap calendar is visible. */
 	showHeatmap: boolean;
 	/** Whether a divider is shown above the heatmap section. */
@@ -650,10 +659,10 @@ export interface NexusSettings {
 	showFileTypeChart: boolean;
 	/** Whether a divider is shown above the file-type chart. */
 	showFileTypeChartDivider: boolean;
-	/** Maximum number of file types shown in the chart. */
-	fileTypeChartMax: number;
 	/** Custom heading label for the file-type chart. */
 	fileTypeChartLabel: string;
+	/** Max legend height (px) for the file-type chart legend before scrolling. */
+	fileTypeLegendHeight: number;
 	/** Whether the task summary widget is visible. */
 	showTaskSummary: boolean;
 	/** Whether a divider is shown above the task summary. */
@@ -662,6 +671,10 @@ export interface NexusSettings {
 	taskSummaryShowProgress: boolean;
 	/** Whether to show the unchecked task list in the task summary. */
 	taskSummaryShowList: boolean;
+	/** Whether to group tasks by due date and highlight overdue/today tasks. */
+	taskSummaryShowDue: boolean;
+	/** Whether tasks can be checked off inline from the dashboard. */
+	taskSummaryCheckable: boolean;
 	/** Vault-relative folder path to filter tasks. */
 	taskSummaryPath: string;
 	/** Comma-separated frontmatter tags used to filter task files. */
@@ -704,8 +717,6 @@ export interface NexusSettings {
 	activityTimelineGroup: "day" | "file";
 	/** Show day separators in the activity timeline. */
 	activityTimelineShowDate: boolean;
-	/** Show interactive action filter chips in the activity timeline. */
-	activityTimelineShowChips: boolean;
 	/** Show a "load more" button when entries exceed the count. */
 	activityTimelineShowMore: boolean;
 	/** Whether the task summary list shows the bottom fade mask. */

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **New Note button sizing** — the button now mirrors the stat cards' layout (flex stretch, centered content) on desktop and mobile, so it no longer looks undersized next to the counters
+- **Heatmap color scale** — replaced the linear max-based scale with GitHub-style rank buckets, so a 1-edit day and a 12–20-edit day get visibly different shades and a single outlier day can no longer flatten the rest of the scale
+- **Heatmap mtime fallback** — a file's last edit day is now filled in per (path, day) even when an older log entry exists for it, so recent edits are no longer hidden when the capped log window drops the modify event
+
+### Changed
+
+- **Heatmap counts edits only** — cells now reflect unique files edited per day (`created` / `modified` / `moved` / `renamed` only); file opens, task toggles, and property edits no longer count as activity
+
 ## v1.3.0
 
 Stable release — feature set unchanged from `v1.3.0-beta.1` (see entry below). The first release meeting the current feature and quality bar.

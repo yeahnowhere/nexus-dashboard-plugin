@@ -13,7 +13,7 @@ import { NexusSettings, ActivityEvent } from "./types";
 import { DEFAULT_SETTINGS, mergeSettings, deepCloneDefaults } from "./defaults";
 import { hasExtension, ensureExtension } from "./utils";
 import { NexusSettingTab, clearVaultFoldersCache } from "./settings";
-import { NexusRenderer } from "./renderer";
+import { NexusRenderer } from "./renderer/index";
 import {
 	STARTUP_RECONCILE_LOOKBACK_MS,
 	collectModifiedEvents,

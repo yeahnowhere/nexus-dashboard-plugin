@@ -74,6 +74,16 @@ export function splitCsv(str: string): string[] {
 }
 
 /**
+ * Format a date as a `YYYY-MM-DD` key (local time), used for heatmap cells
+ * and timeline day grouping.
+ * @param d - Date to format
+ * @returns Local date key, e.g. `2026-08-06`
+ */
+export function dateKey(d: Date): string {
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
  * Apply a key-value pair from YAML-like config to a list-style config object.
  *
  * Unifies the identical `applyRecentlyKV`, `applyVaultListKV`, and

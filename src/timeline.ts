@@ -39,8 +39,6 @@ export interface TimelineOptions {
 	excludeFolders: string[];
 	excludeExt: string[];
 	types: string[];
-	/** Active chip filter as a predicate over an action string. */
-	chipMatch: (action: string) => boolean;
 	/** Resolved number of entries the timeline intends to display. */
 	count: number;
 	/** Coalescing window in ms (defaults to TIMELINE_COALESCE_MS). */
@@ -141,7 +139,6 @@ export function buildTimelineEvents(
 
 	for (const ev of source.log) {
 		if (opts.types.length > 0 && !opts.types.includes(ev.action)) continue;
-		if (!opts.chipMatch(ev.action)) continue;
 		if (opts.onlyMarkdown && !ev.path.toLowerCase().endsWith(".md")) continue;
 		if (opts.excludeExt.some((ext) => ev.path.toLowerCase().endsWith(ext.toLowerCase()))) continue;
 		if (opts.include.length > 0 && !opts.include.some((inc) => isWithinPath(ev.path, inc))) continue;
@@ -150,11 +147,10 @@ export function buildTimelineEvents(
 	}
 
 	// Backfill: only when the active filter would actually show "modified"
-	// entries, otherwise backfilled rows would violate the chip/types filter.
+	// entries, otherwise backfilled rows would violate the types filter.
 	// Backfill runs even when the log is already saturated so files changed on
 	// disk without a logged event (e.g. edits by external tools) still surface.
-	const admitsModified =
-		opts.chipMatch("modified") && (opts.types.length === 0 || opts.types.includes("modified"));
+	const admitsModified = opts.types.length === 0 || opts.types.includes("modified");
 
 	if (admitsModified) {
 		const seen = new Set(logEvents.map((e) => e.path));

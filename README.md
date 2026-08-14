@@ -202,7 +202,7 @@ links:
 ````
 
 ### Heatmap
-A GitHub-style contribution calendar of your vault activity.
+A GitHub-style contribution calendar of your vault editing activity. Each cell's color reflects the number of unique files edited that day (`created`/`modified`/`moved`/`renamed`); file opens, task toggles, and property edits are not counted. Colors use rank-based intensity, so busier days are clearly darker regardless of outliers.
 
 Properties: `show` (true/false), `weeks` (integer), `label`
 
@@ -248,15 +248,24 @@ clock:
 ````
 
 ### File Types
-A horizontal bar chart of the file types in your vault.
+A stacked composition bar showing the share of file types in your vault, with a
+total file count and a legend listing every extension present (e.g. `md`,
+`canvas`, `png`, `js`). Every extension gets its own row and color from a fixed
+vivid palette that stays visible on light and dark themes. The legend wraps into
+multiple columns and caps at the configured height, scrolling internally when
+the vault has many extensions. Optionally scope it to a single folder. In the
+dashboard layout builder you can create named **file-type lists** (folder +
+label + optional max height) in the Components tab and assign one to any
+row/column slot.
 
-Properties: `show` (true/false), `max` (integer), `label`
+Properties: `show` (true/false), `path` (vault-relative folder; empty = whole vault), `label`, `height` (max legend height in px, e.g. `200`)
 
 ````
 ```nexus-dashboard
 filetypes:
   show: true
-  max: 8
+  path: Projects
+  height: 200
 ```
 ````
 

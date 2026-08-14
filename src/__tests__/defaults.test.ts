@@ -4,6 +4,8 @@ import {
 	DEFAULT_MOCS,
 	DEFAULT_STATS,
 	DEFAULT_NEW_NOTE,
+	DEFAULT_VAULT_LISTS,
+	DEFAULT_ROW_LAYOUTS,
 	DEFAULT_DIVIDER_DESIGN,
 	DIVIDER_PRESETS,
 	DIVIDER_PRESET_NAMES,
@@ -11,7 +13,7 @@ import {
 	deepCloneDefaults,
 	mergeSettings,
 } from "../defaults";
-import type { DividerDesign, NexusSettings } from "../types";
+import type { DividerDesign, NexusSettings, RowLayoutEntry, RowLayoutSlot } from "../types";
 
 describe("DEFAULT_SETTINGS", () => {
 	it("is a valid NexusSettings object", () => {
@@ -36,13 +38,20 @@ describe("per-component divider flags", () => {
 		expect(DEFAULT_SETTINGS.showTaskSummaryDivider).toBe(true);
 	});
 
-	it("defaults the legacy MOC divider to hidden", () => {
-		expect(DEFAULT_SETTINGS.showMocDivider).toBe(false);
+	it("defaults the file-type lists to empty", () => {
+		expect(DEFAULT_SETTINGS.fileTypeLists).toEqual([]);
+		expect("fileTypeChartPath" in DEFAULT_SETTINGS).toBe(false);
+		expect(DEFAULT_SETTINGS.fileTypeLegendHeight).toBe(180);
 	});
 
-	it("removed the obsolete quick-links divider flag", () => {
-		expect("showQuickLinksDivider" in DEFAULT_SETTINGS).toBe(false);
-		expect("quickLinksDividerLabel" in DEFAULT_SETTINGS).toBe(false);
+	it("defaults the MOC divider to shown", () => {
+		expect(DEFAULT_SETTINGS.showMocDivider).toBe(true);
+		expect(DEFAULT_SETTINGS.mocDividerLabel).toBe("MOC");
+	});
+
+	it("defaults the quick-links divider to shown", () => {
+		expect(DEFAULT_SETTINGS.showQuickLinksDivider).toBe(true);
+		expect(DEFAULT_SETTINGS.quickLinksDividerLabel).toBe("Quick Links");
 	});
 
 	it("defaults the clock divider to hidden", () => {
@@ -73,8 +82,17 @@ describe("DEFAULT_MOCS", () => {
 });
 
 describe("DEFAULT_STATS", () => {
-	it("has 5 default stats", () => {
-		expect(DEFAULT_STATS).toHaveLength(5);
+	it("has 7 default stats", () => {
+		expect(DEFAULT_STATS).toHaveLength(7);
+	});
+
+	it("includes the metric-based size and tag counters", () => {
+		expect(DEFAULT_STATS).toEqual(
+			expect.arrayContaining([
+				{ folder: "", label: "SIze", metric: "size" },
+				{ folder: "", label: "Tags", metric: "tags" },
+			]),
+		);
 	});
 
 	it("each stat has required fields", () => {
@@ -87,9 +105,11 @@ describe("DEFAULT_STATS", () => {
 });
 
 describe("DEFAULT_NEW_NOTE", () => {
-	it("is disabled by default", () => {
-		expect(DEFAULT_NEW_NOTE.enabled).toBe(false);
-		expect(DEFAULT_NEW_NOTE.label).toBe("+ New Note");
+	it("is enabled by default with a Journal target", () => {
+		expect(DEFAULT_NEW_NOTE.enabled).toBe(true);
+		expect(DEFAULT_NEW_NOTE.label).toBe("NEW NOTE");
+		expect(DEFAULT_NEW_NOTE.folder).toBe("Journal");
+		expect(DEFAULT_NEW_NOTE.template).toBe("");
 	});
 });
 
@@ -105,7 +125,7 @@ describe("mergeSettings statsNewNote", () => {
 		} as Partial<NexusSettings>);
 		expect(result.statsNewNote.enabled).toBe(true);
 		expect(result.statsNewNote.folder).toBe("Inbox");
-		expect(result.statsNewNote.label).toBe("+ New Note");
+		expect(result.statsNewNote.label).toBe("NEW NOTE");
 		expect(result.statsNewNote.template).toBe("");
 	});
 });
@@ -217,19 +237,30 @@ describe("mergeSettings", () => {
 		expect(result.showTaskSummary).toBe(false);
 		expect(result.taskSummaryPath).toBe("Custom/Path");
 		expect(result.taskSummaryCount).toBe(5);
-		expect(result.taskSummaryShowProgress).toBe(true);
+		expect(result.taskSummaryShowProgress).toBe(false);
 	});
 
 	it("preserves vault activity fields", () => {
 		const result = mergeSettings({ vaultActivityLabel: "CUSTOM LABEL" });
 		expect(result.vaultActivityLabel).toBe("CUSTOM LABEL");
-		expect(result.vaultActivityCount).toBe(15);
+		expect(result.vaultActivityCount).toBe(9);
 		expect(result.vaultActivityShowFade).toBe(true);
-		expect(result.vaultActivityMaxHeight).toBe(320);
+		expect(result.vaultActivityMaxHeight).toBe(300);
 		expect(result.activityTimelineShowFade).toBe(true);
-		expect(result.activityTimelineMaxHeight).toBe(320);
+		expect(result.activityTimelineMaxHeight).toBe(500);
 		expect(result.taskSummaryShowFade).toBe(true);
-		expect(result.taskSummaryMaxHeight).toBe(320);
+		expect(result.taskSummaryMaxHeight).toBe(180);
+	});
+
+	it("merges file-type legend height and clones list entries", () => {
+		const result = mergeSettings({
+			fileTypeLegendHeight: 260,
+			fileTypeLists: [{ name: "Docs", path: "Docs", label: "", height: 220 }],
+		});
+		expect(result.fileTypeLegendHeight).toBe(260);
+		expect(result.fileTypeLists).toEqual([{ name: "Docs", path: "Docs", label: "", height: 220 }]);
+		result.fileTypeLists.pop();
+		expect(result.fileTypeLists).toHaveLength(0);
 	});
 
 	it("provides activity tracking and timeline defaults", () => {
@@ -243,7 +274,6 @@ describe("mergeSettings", () => {
 		expect(result.activityTimelineShowRelative).toBe(false);
 		expect(result.activityTimelineGroup).toBe("day");
 		expect(result.activityTimelineShowDate).toBe(true);
-		expect(result.activityTimelineShowChips).toBe(false);
 		expect(result.activityTimelineShowMore).toBe(true);
 	});
 
@@ -263,5 +293,125 @@ describe("mergeSettings", () => {
 		result.mocs.push({ path: "t", title: "t", desc: "t", icon: "t" });
 		expect(DEFAULT_SETTINGS.headerText).toBe("NEXUS");
 		expect(DEFAULT_SETTINGS.mocs).toHaveLength(6);
+	});
+});
+
+describe("mergeSettings nested row layouts", () => {
+	it("deep-clones nested rows embedded in row layout slots", () => {
+		const nested: RowLayoutEntry = {
+			name: "Nested",
+			columns: 2,
+			proportion: "50/50",
+			align: "top",
+			slots: ["moc-cards", "heatmap"],
+		};
+		const data = {
+			rowLayouts: [
+				{
+					name: "Main",
+					columns: 2,
+					proportion: "30/70",
+					align: "top",
+					slots: ["timeline", [nested, "vault-activity"]],
+				},
+			],
+		} as Partial<NexusSettings>;
+
+		const result = mergeSettings(data);
+		expect(result.rowLayouts[0].slots[1]).toHaveLength(2);
+		const nestedClone = (result.rowLayouts[0].slots[1] as RowLayoutSlot[])[0] as RowLayoutEntry;
+		expect(typeof nestedClone).toBe("object");
+		expect(nestedClone.slots).toEqual(["moc-cards", "heatmap"]);
+
+		// Mutating the clone must not affect the source slot object
+		nestedClone.slots[0] = "clock";
+		expect(nested.slots[0]).toBe("moc-cards");
+	});
+
+	it("deep-clones a whole-column nested row and its override maps", () => {
+		const data = {
+			rowLayouts: [
+				{
+					name: "Main",
+					columns: 2,
+					proportion: "50/50",
+					align: "top",
+					slots: [
+						{
+							name: "Nested",
+							columns: 2,
+							proportion: "50/50",
+							align: "top",
+							slots: ["heading", "none"],
+							slotHeadings: { "0": { text: "Hi" } },
+						},
+						"none",
+					],
+				},
+			],
+		} as Partial<NexusSettings>;
+
+		const result = mergeSettings(data);
+		const nestedClone = result.rowLayouts[0].slots[0] as RowLayoutEntry;
+		expect(nestedClone.slotHeadings?.["0"]?.text).toBe("Hi");
+
+		nestedClone.slotHeadings!["0"]!.text = "Changed";
+		const source = (data.rowLayouts![0].slots[0] as RowLayoutEntry).slotHeadings;
+		expect(source?.["0"]?.text).toBe("Hi");
+	});
+
+	it("clones nested rows from deepCloneDefaults without sharing references", () => {
+		const clone = deepCloneDefaults();
+		expect(clone.rowLayouts).toEqual(DEFAULT_ROW_LAYOUTS);
+		expect(clone).not.toBe(DEFAULT_SETTINGS);
+	});
+});
+
+describe("DEFAULT_ROW_LAYOUTS", () => {
+	it("ships the dashboard layout with a nested right column", () => {
+		expect(DEFAULT_ROW_LAYOUTS).toHaveLength(3);
+
+		const [row1, row2, row3] = DEFAULT_ROW_LAYOUTS;
+		expect(row1.slots).toEqual(["stats"]);
+		expect(row1.proportion).toBe("100");
+
+		expect(row2.columns).toBe(2);
+		expect(row2.proportion).toBe("30/70");
+		expect(row2.slots[0]).toBe("timeline");
+		const rightColumn = row2.slots[1] as RowLayoutSlot[];
+		expect(rightColumn).toHaveLength(2);
+		const nested = rightColumn[0] as RowLayoutEntry;
+		expect(nested.name).toBe("Row 2-3 Right");
+		expect(nested.slots).toEqual(["moc-cards", "vault-activity"]);
+		expect(nested.vaultListSlots).toEqual({ "1": "Project" });
+		expect(rightColumn[1]).toBe("heatmap");
+
+		expect(row3.slots).toEqual(["tasks", "filetypes"]);
+	});
+
+	it("assigns stable ids to every default row", () => {
+		for (const row of DEFAULT_ROW_LAYOUTS) {
+			expect(row.id).toMatch(/^row-default-/);
+		}
+	});
+
+	it("deep-clones the default layout without sharing nested references", () => {
+		const clone = deepCloneDefaults();
+		const nested = (clone.rowLayouts[1].slots[1] as RowLayoutSlot[])[0] as RowLayoutEntry;
+		nested.slots[0] = "clock";
+		if (nested.vaultListSlots) nested.vaultListSlots["1"] = "Other";
+
+		const sourceNested = (DEFAULT_ROW_LAYOUTS[1].slots[1] as RowLayoutSlot[])[0] as RowLayoutEntry;
+		expect(sourceNested.slots[0]).toBe("moc-cards");
+		expect(sourceNested.vaultListSlots).toEqual({ "1": "Project" });
+	});
+});
+
+describe("DEFAULT_VAULT_LISTS", () => {
+	it("ships the Project vault list for the nested vault activity slot", () => {
+		expect(DEFAULT_VAULT_LISTS).toEqual([
+			{ name: "Project", path: "Project/Projects MOC", tags: "", count: 50, label: "Project" },
+		]);
+		expect(DEFAULT_SETTINGS.vaultLists).toEqual(DEFAULT_VAULT_LISTS);
 	});
 });
