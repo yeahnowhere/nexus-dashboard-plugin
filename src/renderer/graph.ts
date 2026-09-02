@@ -105,11 +105,8 @@ export async function injectAllGraphLinks(app: App, settings: NexusSettings): Pr
 	const candidates: TFile[] = [];
 
 	for (const file of app.vault.getMarkdownFiles()) {
-		const cache = app.metadataCache.getFileCache(file);
-		const sections = cache?.sections;
-		if (
-			sections?.some((s) => s.type === "code" && (s as { info?: string }).info === "nexus-dashboard")
-		) {
+		const content = await app.vault.cachedRead(file);
+		if (content.includes("```nexus-dashboard")) {
 			candidates.push(file);
 		}
 	}

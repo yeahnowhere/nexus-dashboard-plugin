@@ -5,6 +5,7 @@
 ### Fixed
 
 - **Graph view edges on load** — dashboard → MOC → card edges are now injected into `metadataCache.resolvedLinks` at plugin load (after layout ready) and re-synced on vault/metadata changes (debounced), so the relationships appear in Graph View even before any dashboard file is opened. Injected edges are tracked and removed on unload.
+- **Graph load scan was finding no dashboards** — `injectAllGraphLinks()` detected candidate files via `SectionCache.info`, a field Obsidian's metadata cache does not populate; the scan found zero candidates and injected nothing. Detection is now content-based (`vault.cachedRead` + `content.includes("```nexus-dashboard")`), matching the proven `findDashboardFile` pattern and independent of cache shape or indexing timing.
 - **Graph view missing edges** — card paths are now injected into `metadataCache.resolvedLinks` and a global `"resolved"` event is fired, so MOC/sub-MOC edges from dashboard cards appear in Graph View on first render instead of only after a reload or visiting a linked note
 - **New Note button sizing** — the button now mirrors the stat cards' layout (flex stretch, centered content) on desktop and mobile, so it no longer looks undersized next to the counters
 - **Heatmap color scale** — replaced the linear max-based scale with GitHub-style rank buckets, so a 1-edit day and a 12–20-edit day get visibly different shades and a single outlier day can no longer flatten the rest of the scale

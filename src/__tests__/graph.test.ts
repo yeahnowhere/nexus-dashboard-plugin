@@ -11,8 +11,6 @@ import { makeContext } from "./helpers/render-context";
 import { DEFAULT_MOCS } from "../defaults";
 import type { CardConfig, DashboardBlock, DashboardConfig, SectionConfig } from "../types";
 
-const DASH_SECTION = [{ type: "code", info: "nexus-dashboard" }];
-
 function card(path: string): CardConfig {
 	return { type: "big", label: path, path, icon: "X" };
 }
@@ -179,7 +177,7 @@ describe("extractDashboardBlocks", () => {
 
 describe("injectAllGraphLinks", () => {
 	const emptyBlock = "```nexus-dashboard\n```\n";
-	const emptyDashboard = { path: "Nexus.md", sections: DASH_SECTION, content: emptyBlock };
+	const emptyDashboard = { path: "Nexus.md", content: emptyBlock };
 	const mocFiles = DEFAULT_MOCS.map((m) => ({ path: m.path }));
 
 	it("injects settings MOC edges for an empty dashboard block", async () => {
@@ -216,7 +214,7 @@ describe("injectAllGraphLinks", () => {
 		].join("\n");
 		const ctx = makeContext({
 			files: [
-				{ path: "MOC/Knowledge MOC.md", sections: DASH_SECTION, content },
+				{ path: "MOC/Knowledge MOC.md", content },
 				{ path: "MOC/Sub-A.md" },
 				{ path: "MOC/Sub-B.md" },
 			],
@@ -243,10 +241,7 @@ describe("injectAllGraphLinks", () => {
 			"",
 		].join("\n");
 		const ctx = makeContext({
-			files: [
-				{ path: "MOC/Knowledge MOC.md", sections: DASH_SECTION, content },
-				{ path: "MOC/Sub.md" },
-			],
+			files: [{ path: "MOC/Knowledge MOC.md", content }, { path: "MOC/Sub.md" }],
 		});
 
 		await injectAllGraphLinks(ctx.app, ctx.settings);
@@ -272,7 +267,7 @@ describe("injectAllGraphLinks", () => {
 		].join("\n");
 		const ctx = makeContext({
 			files: [
-				{ path: "MOC/Knowledge MOC.md", sections: DASH_SECTION, content },
+				{ path: "MOC/Knowledge MOC.md", content },
 				{ path: "MOC/Archived/Old.md" },
 				{ path: "MOC/Sub.md" },
 			],
@@ -308,7 +303,7 @@ describe("injectAllGraphLinks", () => {
 			].join("\n");
 		const ctx = makeContext({
 			files: [
-				{ path: "MOC/Knowledge MOC.md", sections: DASH_SECTION, content: withCard("MOC/Sub-A.md") },
+				{ path: "MOC/Knowledge MOC.md", content: withCard("MOC/Sub-A.md") },
 				{ path: "MOC/Sub-A.md" },
 				{ path: "MOC/Sub-B.md" },
 			],
@@ -347,13 +342,26 @@ describe("injectAllGraphLinks", () => {
 		expect(cacheOf(ctx).trigger).toHaveBeenCalledTimes(1);
 	});
 
-	it("does not touch files without dashboard sections", async () => {
+	it("does not touch files without dashboard blocks", async () => {
 		const ctx = makeContext({ files: [{ path: "Note.md", content: "plain" }] });
 
 		await injectAllGraphLinks(ctx.app, ctx.settings);
 
 		expect(cacheOf(ctx).resolvedLinks).toEqual({});
 		expect(cacheOf(ctx).trigger).not.toHaveBeenCalled();
+	});
+
+	it("detects dashboard blocks by content even without cache sections", async () => {
+		const ctx = makeContext({
+			files: [{ path: "Nexus.md", content: emptyBlock }, ...mocFiles],
+		});
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["Nexus.md"]).toEqual(
+			Object.fromEntries(DEFAULT_MOCS.map((m) => [m.path, 1])),
+		);
+		expect(cacheOf(ctx).trigger).toHaveBeenCalledWith("resolved");
 	});
 
 	it("clearInjectedGraphLinks removes all injected edges", async () => {
