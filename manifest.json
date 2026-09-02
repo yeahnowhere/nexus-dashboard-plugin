@@ -1,7 +1,7 @@
 {
 	"id": "nexus-dashboard",
 	"name": "Nexus Dashboard",
-	"version": "1.3.0",
+	"version": "1.3.1",
 	"minAppVersion": "1.0.0",
 	"description": "ASCII art banners + theme-aware dashboard for your vault — stats, MOC cards, and recently modified notes via simple code blocks.",
 	"author": "Raspsec",
