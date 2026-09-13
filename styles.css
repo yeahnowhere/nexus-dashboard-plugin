@@ -2095,8 +2095,17 @@ select.dropdown option:disabled {
     min-width: 60px;
   }
 
+  .nexus-heatmap {
+    overflow-x: auto;
+  }
+
   .nexus-heatmap-months {
     grid-template-columns: 28px repeat(var(--nexus-heatmap-weeks, 20), 1fr);
+    min-width: calc(var(--nexus-heatmap-weeks, 20) * 10px + 32px);
+  }
+
+  .nexus-heatmap-body {
+    min-width: calc(var(--nexus-heatmap-weeks, 20) * 10px + 32px);
   }
 
   .nexus-heatmap-day-label {

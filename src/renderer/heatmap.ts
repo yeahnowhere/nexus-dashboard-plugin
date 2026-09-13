@@ -195,4 +195,10 @@ export function renderHeatmap(
 
 	const summaryEl = heatmapEl.createDiv({ cls: "nexus-heatmap-summary" });
 	summaryEl.textContent = `${total} ${total === 1 ? "activity" : "activities"} · ${streak}-day streak`;
+
+	if (document.body.classList.contains("is-phone")) {
+		requestAnimationFrame(() => {
+			heatmapEl.scrollLeft = heatmapEl.scrollWidth;
+		});
+	}
 }
