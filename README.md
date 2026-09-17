@@ -215,7 +215,7 @@ heatmap:
 ````
 
 ### Activity Timeline
-A chronological log of vault activity — created, modified, deleted, renamed/moved, opened, task, and folder events — with day or file grouping, relative times, and date chips. `MODIFIED` events update live as you edit; external renames are recovered via delete+create pairing and startup mtime reconciliation, so they appear as `renamed` instead of a spurious delete.
+A chronological log of vault activity — created, modified, deleted, renamed/moved, task, and property events — with day or file grouping, relative times, and date chips. `MODIFIED` events update live as you edit; external renames are recovered via delete+create pairing and startup mtime reconciliation, so they appear as `renamed` instead of a spurious delete.
 
 Properties: `show` (true/false), `label`, `exclude` (comma-separated folders), `include` (comma-separated folders), `excludeExt` (comma-separated extensions), `types` (comma-separated actions, e.g. `created,deleted`), `onlyMarkdown` (true/false), `group` (day/file), `relative` (true/false), `showDate` (true/false), `showChips` (true/false)
 
@@ -249,8 +249,8 @@ clock:
 ### File Types
 A stacked composition bar showing the share of file types in your vault, with a
 total file count and a legend listing every extension present (e.g. `md`,
-`canvas`, `png`, `js`). Every extension gets its own row and color from a fixed
-vivid palette that stays visible on light and dark themes. The legend wraps into
+`canvas`, `png`, `js`). Every extension gets its own row and color from a
+theme-accent ramp that adapts to any theme or accent color. The legend wraps into
 multiple columns and caps at the configured height, scrolling internally when
 the vault has many extensions. Optionally scope it to a single folder. In the
 dashboard layout builder you can create named **file-type lists** (folder +

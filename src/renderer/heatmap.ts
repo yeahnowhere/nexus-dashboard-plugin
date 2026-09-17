@@ -7,9 +7,9 @@ import { renderDivider } from "./dividers";
 const EDIT_ACTIONS = new Set(["created", "modified", "moved", "renamed"]);
 
 /**
- * Build a GitHub-style intensity level (1..5) for each distinct nonzero day
- * count. Levels are assigned by rank (quantile-ish), so common low counts stay
- * light and a single outlier day can't flatten the rest of the scale.
+ * Build an intensity level (1..4) for each distinct nonzero day count. Levels
+ * are assigned by rank (quantile-ish), so common low counts stay light and a
+ * single outlier day can't flatten the rest of the scale.
  */
 export function computeLevelMap(counts: number[]): Map<number, number> {
 	const map = new Map<number, number>();
@@ -18,12 +18,12 @@ export function computeLevelMap(counts: number[]): Map<number, number> {
 	if (n === 0) return map;
 	for (let i = 0; i < n; i++) {
 		const fraction = (i + 1) / n;
-		map.set(unique[i], Math.min(5, Math.max(1, Math.ceil(fraction * 5))));
+		map.set(unique[i], Math.min(4, Math.max(1, Math.ceil(fraction * 4))));
 	}
 	return map;
 }
 
-/** Render a GitHub-style contribution heatmap with today-ring + streak summary. */
+/** Render a GitHub-style contribution heatmap with a today ring. */
 export function renderHeatmap(
 	ctx: RendererContext,
 	containerEl: HTMLElement,
@@ -41,14 +41,17 @@ export function renderHeatmap(
 
 	// Count unique (path, day) edit activity. A file is counted via the log on
 	// days the log records an edit for it (created/modified/moved/renamed only —
-	// opens, task toggles and property edits are not edits). The mtime pass then
-	// only fills in days the log has no entry for a file, so edits that fell
-	// outside the capped log window still appear.
+	// opens, task toggles and property edits are not edits). Files with no log
+	// entry at all fall back to a single mtime count, so activity from before
+	// the log window still shows — but a logged file's mtime is never counted,
+	// so mtime can't inflate (or double-count) recent days.
 	const dayCounts = new Map<string, number>();
 	const counted = new Set<string>();
+	const loggedPaths = new Set<string>();
 
 	for (const event of ctx.settings.activityLog || []) {
 		if (!EDIT_ACTIONS.has(event.action)) continue;
+		loggedPaths.add(event.path);
 		const key = dateKey(new Date(event.time));
 		const pair = `${key}|${event.path}`;
 		if (counted.has(pair)) continue;
@@ -57,6 +60,7 @@ export function renderHeatmap(
 	}
 
 	for (const file of ctx.app.vault.getMarkdownFiles()) {
+		if (loggedPaths.has(file.path)) continue;
 		const key = dateKey(new Date(file.stat.mtime));
 		const pair = `${key}|${file.path}`;
 		if (counted.has(pair)) continue;
@@ -166,37 +170,6 @@ export function renderHeatmap(
 			}
 		}
 	}
-
-	// Legend
-	const legendEl = heatmapEl.createDiv({ cls: "nexus-heatmap-legend" });
-	legendEl.createEl("span", { text: "Less", cls: "nexus-heatmap-legend-label" });
-	for (let i = 0; i <= 5; i++) {
-		const box = legendEl.createDiv({ cls: `nexus-heatmap-cell nexus-heatmap-cell-level-${i}` });
-		box.style.width = "10px";
-		box.style.height = "10px";
-	}
-	legendEl.createEl("span", { text: "More", cls: "nexus-heatmap-legend-label" });
-
-	// Summary: total activity in the displayed range + current streak
-	const startKey = dateKey(startDate);
-	let total = 0;
-	for (const [key, count] of dayCounts) {
-		if (key >= startKey && key <= todayKey) total += count;
-	}
-
-	let streak = 0;
-	let streakDay = new Date(today);
-	if ((dayCounts.get(dateKey(streakDay)) || 0) === 0) {
-		streakDay.setDate(streakDay.getDate() - 1);
-	}
-	while (streakDay.getTime() >= startDate.getTime()) {
-		if ((dayCounts.get(dateKey(streakDay)) || 0) === 0) break;
-		streak++;
-		streakDay.setDate(streakDay.getDate() - 1);
-	}
-
-	const summaryEl = heatmapEl.createDiv({ cls: "nexus-heatmap-summary" });
-	summaryEl.textContent = `${total} ${total === 1 ? "activity" : "activities"} · ${streak}-day streak`;
 
 	if (document.body.classList.contains("is-phone")) {
 		requestAnimationFrame(() => {

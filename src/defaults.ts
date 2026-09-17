@@ -240,7 +240,7 @@ export const DEFAULT_SETTINGS: NexusSettings = {
 	activityTimelineShowFade: true,
 	activityTimelineMaxHeight: 500,
 	activityLog: [],
-	activityLogMax: 500,
+	activityLogMax: 2000,
 	activityTrackingEnabled: true,
 	activityTaskTracking: true,
 	activityTimelineOnlyMarkdown: true,

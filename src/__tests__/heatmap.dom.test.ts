@@ -24,6 +24,12 @@ afterEach(() => {
 const day = (y: number, m: number, d: number, h = 9): number =>
 	new Date(y, m - 1, d, h, 0, 0).getTime();
 
+function cellTitleFor(scoped: Element, key: string): string | undefined {
+	const grid = scoped.querySelector<HTMLElement>(".nexus-heatmap-grid");
+	const cells = Array.from(grid?.querySelectorAll<HTMLElement>(".nexus-heatmap-cell") ?? []);
+	return cells.find((c) => c.title.startsWith(`${key}:`))?.title;
+}
+
 describe("computeLevelMap", () => {
 	it("maps increasing counts to increasing levels", () => {
 		const map = computeLevelMap([1, 4, 12, 20]);
@@ -34,22 +40,22 @@ describe("computeLevelMap", () => {
 		expect(one).toBeLessThan(four);
 		expect(four).toBeLessThan(twelve);
 		expect(twelve).toBeLessThan(twenty);
-		expect(twenty).toBe(5);
+		expect(twenty).toBe(4);
 	});
 
 	it("keeps a 12-edit day visibly darker than a 1-edit day", () => {
 		const map = computeLevelMap([1, 12, 20]);
 		expect(map.get(1)).toBe(2);
-		expect(map.get(12)).toBe(4);
-		expect(map.get(20)).toBe(5);
+		expect(map.get(12)).toBe(3);
+		expect(map.get(20)).toBe(4);
 	});
 
 	it("does not flatten the scale when an outlier day dominates", () => {
 		const map = computeLevelMap([1, 12, 20, 300]);
 		expect(map.get(1) ?? 0).toBeLessThan(map.get(12) ?? 0);
-		expect(map.get(12)).toBe(3);
-		expect(map.get(20)).toBe(4);
-		expect(map.get(300)).toBe(5);
+		expect(map.get(12)).toBe(2);
+		expect(map.get(20)).toBe(3);
+		expect(map.get(300)).toBe(4);
 	});
 
 	it("returns an empty map when there are no nonzero counts", () => {
@@ -99,7 +105,7 @@ describe("renderHeatmap", () => {
 		expect(todayCell).toBeDefined();
 		expect(todayCell?.title).toContain("2026-08-06");
 		expect(
-			todayCell?.className.split(" ").some((c) => /^nexus-heatmap-cell-level-[1-5]$/.test(c)),
+			todayCell?.className.split(" ").some((c) => /^nexus-heatmap-cell-level-[1-4]$/.test(c)),
 		).toBe(true);
 	});
 
@@ -112,8 +118,7 @@ describe("renderHeatmap", () => {
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 4 }));
 
-		const summary = el.querySelector(".nexus-heatmap-summary")?.textContent;
-		expect(summary).toBe("1 activity · 0-day streak");
+		expect(cellTitleFor(el, "2026-08-04")).toBe("2026-08-04: 1 file");
 	});
 
 	it("gives busier days visibly darker levels than a 1-edit day", () => {
@@ -159,40 +164,28 @@ describe("renderHeatmap", () => {
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 4 }));
 
-		const summary = el.querySelector(".nexus-heatmap-summary")?.textContent;
-		expect(summary).toBe("4 activities · 1-day streak");
+		expect(cellTitleFor(el, "2026-08-06")).toBe("2026-08-06: 4 files");
 	});
 
-	it("falls back to mtime for a file whose only log entry is an older day", () => {
+	it("counts mtime only for files with no log entry", () => {
 		const ctx = makeContext({
-			files: [{ path: "recent.md", mtime: day(2026, 8, 6) }],
+			files: [
+				{ path: "logged.md", mtime: day(2026, 8, 6) },
+				{ path: "untracked.md", mtime: day(2026, 8, 5) },
+			],
 			settings: {
-				activityLog: [{ time: day(2026, 8, 1), action: "created", path: "recent.md" }],
+				activityLog: [{ time: day(2026, 8, 1), action: "created", path: "logged.md" }],
 			},
 		});
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 4 }));
 
-		const summary = el.querySelector(".nexus-heatmap-summary")?.textContent;
-		expect(summary).toBe("2 activities · 1-day streak");
+		expect(cellTitleFor(el, "2026-08-01")).toBe("2026-08-01: 1 file");
+		expect(cellTitleFor(el, "2026-08-06")).toBe("2026-08-06: 0 files");
+		expect(cellTitleFor(el, "2026-08-05")).toBe("2026-08-05: 1 file");
 	});
 
-	it("summarizes total activity and current streak", () => {
-		const ctx = makeContext({
-			files: [
-				{ path: "a.md", mtime: day(2026, 8, 6) },
-				{ path: "b.md", mtime: day(2026, 8, 6, 10) },
-				{ path: "c.md", mtime: day(2026, 8, 5) },
-			],
-		});
-		const el = host();
-		renderHeatmap(ctx, el, makeConfig({ weeks: 4 }));
-
-		const summary = el.querySelector(".nexus-heatmap-summary")?.textContent;
-		expect(summary).toBe("3 activities · 2-day streak");
-	});
-
-	it("renders month labels, day labels, and the legend", () => {
+	it("renders month labels and day labels", () => {
 		const ctx = makeContext();
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 20 }));
@@ -200,9 +193,6 @@ describe("renderHeatmap", () => {
 		const heatmap = el.querySelector<HTMLElement>(".nexus-heatmap");
 		expect(heatmap?.querySelectorAll(".nexus-heatmap-month-spacer").length).toBeGreaterThan(1);
 		expect(heatmap?.querySelectorAll(".nexus-heatmap-day-label").length).toBe(7);
-		const legend = heatmap?.querySelector(".nexus-heatmap-legend");
-		expect(legend?.textContent).toContain("Less");
-		expect(legend?.textContent).toContain("More");
 	});
 
 	it("renders the divider label from config", () => {

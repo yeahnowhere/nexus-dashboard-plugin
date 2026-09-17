@@ -2,11 +2,24 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Heatmap day grid disappeared inside panels** — the panel background and the empty heatmap cells both used `var(--background-secondary)`, so the inactive cells and the grid gaps blended into one flat block; empty/inactive cells now use a subtle translucent neutral (`color-mix` with `--text-normal`), so the per-day grid reads GitHub-style on any theme and card background without turning dark
+- **Activity log was full of noise** — `folder-created`, `folder-deleted`, `folder-renamed` and `opened` events consumed the capped log buffer (often 60 %+), pushing real edit history out; the plugin now records only genuine file edits (`created`, `modified`, `moved`, `renamed`, `deleted`, plus optional `task` / `property` toggles), and existing noise is purged on startup
+- **Heatmap mtime was double-counting recent days** — the mtime fallback now only fills files with no edit-log entry at all, so a logged file's mtime can't inflate (or double-count) recent days
+
 ### Changed
 
 - **Unified card panels** — all widgets (clock, heatmap, timeline, vault activity, task summary, file types, quick links) now render inside bordered card panels matching the MOC card style
 - **Timeline** — the "Show more" button and its `count` / `showMore` options were removed; the full filtered event list now renders (scroll + fade mask retained)
-- **File-type chart** — the fixed color palette is now a theme-accent ramp (`color-mix`), so the chart adapts to any theme or accent color
+- **File-type chart** — the fixed color palette is now a theme-accent ramp blended against the card background (`25 % → 100 %` of `--interactive-accent`), so the chart adapts to any theme or accent color and every slot stays clearly visible
+- **Heatmap scale** — now 4 intensity levels (was 5), with a stronger accent ramp mixed against the card background (`30 % → 100 %`), so each step is clearly distinguishable on any theme
+- **Activity log buffer** — default `activityLogMax` raised from 500 to 2000 so a longer edit history is retained
+- **Resize dividers** — hovering a row/column divider no longer flashes an accent bar; the accent now shows only while actively dragging
+
+### Removed
+
+- **Heatmap legend and summary** — the "Less / More" legend and the "N activities · X-day streak" line were removed
 
 ## v1.3.1 — 2026-09-02
 

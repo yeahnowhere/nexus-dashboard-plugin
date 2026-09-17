@@ -1116,11 +1116,6 @@
   bottom: 0;
 }
 
-.nexus-row-divider:hover {
-  background: var(--interactive-accent);
-  opacity: 0.25;
-}
-
 .nexus-row-divider.dragging {
   background: var(--interactive-accent);
   opacity: 0.4;
@@ -1181,11 +1176,6 @@
   right: 0;
   top: -8px;
   bottom: -8px;
-}
-
-.nexus-column-divider:hover {
-  background: var(--interactive-accent);
-  opacity: 0.25;
 }
 
 .nexus-column-divider.dragging {
@@ -1718,58 +1708,32 @@ select.dropdown option:disabled {
 }
 
 .nexus-heatmap-cell-empty {
-  background: var(--background-secondary);
-  opacity: 0.3;
+  background: color-mix(in srgb, var(--text-normal) 6%, transparent);
+  opacity: 0.5;
 }
 
 .nexus-heatmap-cell-level-0 {
-  background: var(--background-secondary);
+  background: color-mix(in srgb, var(--text-normal) 9%, transparent);
 }
 
 .nexus-heatmap-cell-level-1 {
-  background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  background: color-mix(in srgb, var(--interactive-accent) 30%, var(--background-secondary));
 }
 
 .nexus-heatmap-cell-level-2 {
-  background: color-mix(in srgb, var(--interactive-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--interactive-accent) 50%, var(--background-secondary));
 }
 
 .nexus-heatmap-cell-level-3 {
-  background: color-mix(in srgb, var(--interactive-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--interactive-accent) 70%, var(--background-secondary));
 }
 
 .nexus-heatmap-cell-level-4 {
-  background: color-mix(in srgb, var(--interactive-accent) 75%, transparent);
-}
-
-.nexus-heatmap-cell-level-5 {
   background: var(--interactive-accent);
-}
-
-.nexus-heatmap-legend {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  justify-content: flex-end;
-  margin-top: 6px;
-}
-
-.nexus-heatmap-legend-label {
-  font-size: 0.55rem;
-  color: var(--text-faint);
-  margin: 0 2px;
 }
 
 .nexus-heatmap-cell-today {
   outline: 1px solid var(--interactive-accent);
-}
-
-.nexus-heatmap-summary {
-  font-size: 0.62rem;
-  color: var(--text-muted);
-  text-align: right;
-  margin-top: 5px;
-  font-variant-numeric: tabular-nums;
 }
 
 /* ============================================================
@@ -2007,15 +1971,16 @@ select.dropdown option:disabled {
    ============================================================ */
 
 .nexus-filetypes {
-  /* Theme-adaptive palette — a ramp of the theme accent so the
-     chart follows any theme/accent instead of hardcoded colors. */
-  --nexus-ft-0: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
-  --nexus-ft-1: color-mix(in srgb, var(--interactive-accent) 30%, transparent);
-  --nexus-ft-2: color-mix(in srgb, var(--interactive-accent) 42%, transparent);
-  --nexus-ft-3: color-mix(in srgb, var(--interactive-accent) 54%, transparent);
-  --nexus-ft-4: color-mix(in srgb, var(--interactive-accent) 66%, transparent);
-  --nexus-ft-5: color-mix(in srgb, var(--interactive-accent) 78%, transparent);
-  --nexus-ft-6: color-mix(in srgb, var(--interactive-accent) 90%, transparent);
+  /* Theme-adaptive palette — a ramp of the theme accent blended against the
+     card background so the chart follows any theme/accent and every slot
+     stays clearly visible. */
+  --nexus-ft-0: color-mix(in srgb, var(--interactive-accent) 25%, var(--background-secondary));
+  --nexus-ft-1: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-secondary));
+  --nexus-ft-2: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-secondary));
+  --nexus-ft-3: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-secondary));
+  --nexus-ft-4: color-mix(in srgb, var(--interactive-accent) 65%, var(--background-secondary));
+  --nexus-ft-5: color-mix(in srgb, var(--interactive-accent) 75%, var(--background-secondary));
+  --nexus-ft-6: color-mix(in srgb, var(--interactive-accent) 88%, var(--background-secondary));
   --nexus-ft-7: var(--interactive-accent);
   margin-top: 0.5rem;
 }

@@ -5,7 +5,6 @@ import {
 	Plugin,
 	Notice,
 	TFile,
-	TFolder,
 	TAbstractFile,
 	moment,
 } from "obsidian";
@@ -34,7 +33,6 @@ export default class NexusDashboardPlugin extends Plugin {
 	private propertyCheckQueue: Set<string> = new Set();
 	private taskSnapshot = new Map<string, Map<number, string>>();
 	private propertySnapshot = new Map<string, string>();
-	private openedThrottle = new Map<string, number>();
 	private recentFiles: { at: number; files: TFile[] } | null = null;
 	private fileMtimes = new Map<string, number>();
 	private pluginLoadTime = Date.now();
@@ -49,6 +47,7 @@ export default class NexusDashboardPlugin extends Plugin {
 
 		await this.loadSettings();
 		this.purgeStartupArtifacts();
+		this.purgeActivityLogNoise();
 		this.primeFileMtimes();
 
 		// ── Migration: append .md to extension-free MOC paths ──
@@ -335,18 +334,14 @@ export default class NexusDashboardPlugin extends Plugin {
 			this.app.vault.on("create", (file: TAbstractFile) => {
 				this.recentFiles = null;
 				if (this.isStartupArtifact(file)) return;
-				if (file instanceof TFolder) {
-					if (file.isRoot()) return;
-					this.recordActivity({ action: "folder-created", path: file.path });
-				} else if (file instanceof TFile) {
-					const mtime = file.stat?.mtime;
-					if (mtime) this.fileMtimes.set(file.path, mtime);
-					this.recordActivity({
-						action: "created",
-						path: file.path,
-						detail: this.isDailyNote(file) ? "daily note" : undefined,
-					});
-				}
+				if (!(file instanceof TFile)) return;
+				const mtime = file.stat?.mtime;
+				if (mtime) this.fileMtimes.set(file.path, mtime);
+				this.recordActivity({
+					action: "created",
+					path: file.path,
+					detail: this.isDailyNote(file) ? "daily note" : undefined,
+				});
 			}),
 		);
 
@@ -366,9 +361,7 @@ export default class NexusDashboardPlugin extends Plugin {
 		this.registerEvent(
 			this.app.vault.on("delete", (file: TAbstractFile) => {
 				this.recentFiles = null;
-				if (file instanceof TFolder) {
-					this.recordActivity({ action: "folder-deleted", path: file.path });
-				} else if (file instanceof TFile) {
+				if (file instanceof TFile) {
 					const mtime = this.fileMtimes.get(file.path);
 					this.fileMtimes.delete(file.path);
 					this.recordActivity({
@@ -386,13 +379,7 @@ export default class NexusDashboardPlugin extends Plugin {
 			this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
 				this.recentFiles = null;
 				const sameFolder = this.parentOf(oldPath) === this.parentOf(file.path);
-				if (file instanceof TFolder) {
-					this.recordActivity({
-						action: sameFolder ? "renamed" : "folder-renamed",
-						path: file.path,
-						oldPath,
-					});
-				} else if (file instanceof TFile) {
+				if (file instanceof TFile) {
 					const m = this.fileMtimes.get(oldPath);
 					if (m !== undefined) this.fileMtimes.set(file.path, m);
 					else {
@@ -416,17 +403,6 @@ export default class NexusDashboardPlugin extends Plugin {
 						this.propertySnapshot.set(file.path, props);
 					}
 				}
-			}),
-		);
-
-		// Active file opened (throttled per file)
-		this.registerEvent(
-			this.app.workspace.on("file-open", (file: TFile | null) => {
-				if (!(file instanceof TFile)) return;
-				const last = this.openedThrottle.get(file.path) || 0;
-				if (Date.now() - last < 60_000) return;
-				this.openedThrottle.set(file.path, Date.now());
-				this.recordActivity({ action: "opened", path: file.path });
 			}),
 		);
 
@@ -592,11 +568,21 @@ export default class NexusDashboardPlugin extends Plugin {
 		const cutoff = 10 * 60 * 1000;
 		const before = this.settings.activityLog.length;
 		this.settings.activityLog = this.settings.activityLog.filter((ev) => {
-			if (ev.action !== "created" && ev.action !== "folder-created") return true;
+			if (ev.action !== "created") return true;
 			const file = this.app.vault.getAbstractFileByPath(ev.path);
 			if (!file) return true;
 			return !(this.earliestStat(file) < ev.time - cutoff);
 		});
+		if (this.settings.activityLog.length !== before) {
+			void this.saveData(this.settings);
+		}
+	}
+
+	/** Drop non-edit noise from older logs so it stops flooding the cap. */
+	private purgeActivityLogNoise(): void {
+		const noise = new Set(["folder-created", "folder-deleted", "folder-renamed", "opened"]);
+		const before = this.settings.activityLog.length;
+		this.settings.activityLog = this.settings.activityLog.filter((ev) => !noise.has(ev.action));
 		if (this.settings.activityLog.length !== before) {
 			void this.saveData(this.settings);
 		}

@@ -267,7 +267,7 @@ describe("mergeSettings", () => {
 		const result = mergeSettings(null);
 		expect(result.activityTrackingEnabled).toBe(true);
 		expect(result.activityTaskTracking).toBe(true);
-		expect(result.activityLogMax).toBe(500);
+		expect(result.activityLogMax).toBe(2000);
 		expect(result.activityLog).toEqual([]);
 		expect(result.activityTimelineOnlyMarkdown).toBe(true);
 		expect(result.activityTimelineIncludeFolders).toBe("");
