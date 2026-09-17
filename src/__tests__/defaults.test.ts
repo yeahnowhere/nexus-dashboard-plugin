@@ -25,6 +25,7 @@ describe("DEFAULT_SETTINGS", () => {
 		expect(typeof DEFAULT_SETTINGS.showStats).toBe("boolean");
 		expect(typeof DEFAULT_SETTINGS.showGraph).toBe("boolean");
 		expect(typeof DEFAULT_SETTINGS.mocGridColumns).toBe("number");
+		expect(DEFAULT_SETTINGS.mocCardsMaxHeight).toBe(0);
 		expect("miniGridColumns" in DEFAULT_SETTINGS).toBe(false);
 	});
 });
@@ -41,7 +42,7 @@ describe("per-component divider flags", () => {
 	it("defaults the file-type lists to empty", () => {
 		expect(DEFAULT_SETTINGS.fileTypeLists).toEqual([]);
 		expect("fileTypeChartPath" in DEFAULT_SETTINGS).toBe(false);
-		expect(DEFAULT_SETTINGS.fileTypeLegendHeight).toBe(180);
+		expect(DEFAULT_SETTINGS.fileTypeLegendHeight).toBe(120);
 	});
 
 	it("defaults the MOC divider to shown", () => {
@@ -243,13 +244,13 @@ describe("mergeSettings", () => {
 	it("preserves vault activity fields", () => {
 		const result = mergeSettings({ vaultActivityLabel: "CUSTOM LABEL" });
 		expect(result.vaultActivityLabel).toBe("CUSTOM LABEL");
-		expect(result.vaultActivityCount).toBe(9);
+		expect(result.vaultActivityCount).toBe(50);
 		expect(result.vaultActivityShowFade).toBe(true);
-		expect(result.vaultActivityMaxHeight).toBe(300);
+		expect(result.vaultActivityMaxHeight).toBe(240);
 		expect(result.activityTimelineShowFade).toBe(true);
-		expect(result.activityTimelineMaxHeight).toBe(500);
+		expect(result.activityTimelineMaxHeight).toBe(410);
 		expect(result.taskSummaryShowFade).toBe(true);
-		expect(result.taskSummaryMaxHeight).toBe(180);
+		expect(result.taskSummaryMaxHeight).toBe(120);
 	});
 
 	it("merges file-type legend height and clones list entries", () => {
@@ -407,9 +408,9 @@ describe("DEFAULT_ROW_LAYOUTS", () => {
 });
 
 describe("DEFAULT_VAULT_LISTS", () => {
-	it("ships the Project vault list for the nested vault activity slot", () => {
+	it("ships the Project vault list pointing at the Project folder", () => {
 		expect(DEFAULT_VAULT_LISTS).toEqual([
-			{ name: "Project", path: "Project/Projects MOC", tags: "", count: 50, label: "Project" },
+			{ name: "Project", path: "Project", tags: "", count: 50, label: "Project" },
 		]);
 		expect(DEFAULT_SETTINGS.vaultLists).toEqual(DEFAULT_VAULT_LISTS);
 	});

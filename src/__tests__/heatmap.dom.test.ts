@@ -195,6 +195,46 @@ describe("renderHeatmap", () => {
 		expect(heatmap?.querySelectorAll(".nexus-heatmap-day-label").length).toBe(7);
 	});
 
+	it("anchors month labels to the week column where each month starts", () => {
+		const ctx = makeContext();
+		const el = host();
+		renderHeatmap(ctx, el, makeConfig({ weeks: 20 }));
+
+		const heatmap = el.querySelector<HTMLElement>(".nexus-heatmap");
+		const labels = Array.from(
+			heatmap?.querySelectorAll<HTMLElement>(".nexus-heatmap-month-spacer") ?? [],
+		).filter((s) => s.textContent);
+
+		// System time is 2026-08-06 with 20 weeks: range starts Sun 2026-03-22.
+		// March is cut at the left edge, so labels run Apr..Aug and each label
+		// begins at the column containing that month's 1st (grid line start+2).
+		expect(labels.map((l) => l.textContent)).toEqual(["Apr", "May", "Jun", "Jul", "Aug"]);
+
+		const parse = (gc: string): { start: number; span: number } => {
+			const m = gc.match(/^(\d+) \/ span (\d+)$/);
+			return { start: Number(m?.[1]), span: Number(m?.[2]) };
+		};
+
+		const dayMs = 86_400_000;
+		const rangeStart = new Date(2026, 2, 22);
+		const colFor = (month: number): number => {
+			const first = new Date(2026, month, 1, 12, 0, 0);
+			return Math.floor(Math.round((first.getTime() - rangeStart.getTime()) / dayMs) / 7);
+		};
+
+		const starts = labels.map((l) => parse(l.style.gridColumn).start);
+		const anchors = starts.map((s) => s - 2);
+		expect(anchors).toEqual([3, 4, 5, 6, 7].map((m) => colFor(m)));
+
+		for (let i = 0; i < starts.length; i++) {
+			expect(starts[i]).toBeGreaterThanOrEqual(2);
+			if (i > 0) expect(starts[i]).toBeGreaterThan(starts[i - 1]);
+		}
+
+		const last = parse(labels[labels.length - 1].style.gridColumn);
+		expect(last.start + last.span).toBeLessThanOrEqual(22);
+	});
+
 	it("renders the divider label from config", () => {
 		const ctx = makeContext();
 		const el = host();

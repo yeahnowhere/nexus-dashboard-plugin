@@ -68,6 +68,25 @@ section:
 		}
 	});
 
+	it("parses a section height override", () => {
+		const config = parseDashboard(`
+section:
+  columns: 2
+  height: 300
+  cards:
+    - type: big
+      label: Test
+      path: Test.md
+      icon: MOC
+`);
+		const section = config.blocks[0];
+		expect(section.kind).toBe("section");
+		if (section.kind === "section") {
+			expect(section.columns).toBe(2);
+			expect(section.height).toBe(300);
+		}
+	});
+
 	it("parses divider", () => {
 		const config = parseDashboard(`
 divider:

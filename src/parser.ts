@@ -725,6 +725,9 @@ function applySectionKV(section: SectionConfig, kv: { key: string; value: string
 	if (kv.key === "columns" || kv.key === "grid") {
 		section.columns = safeParseInt(kv.value, 2, 1) ?? 2;
 	}
+	if (kv.key === "height") {
+		section.height = safeParseInt(kv.value, 0, 0) ?? 0;
+	}
 }
 
 function applyCardKV(card: Partial<CardConfig>, kv: { key: string; value: string }) {

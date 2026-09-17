@@ -1,4 +1,5 @@
-import type { NexusSettings, RowLayoutEntry, ContentSlotType } from "./types";
+import type { NexusSettings, RowLayoutEntry, RowLayoutSlot, ContentSlotType } from "./types";
+import { DEFAULT_ROW_LAYOUTS } from "./defaults";
 
 /** The content components every built-in preset includes. */
 export const PRESET_COMPONENTS: ContentSlotType[] = [
@@ -46,204 +47,96 @@ const ALL_COMPONENTS_ON: Partial<NexusSettings> = {
 };
 
 /**
- * Built-in dashboard presets. Every preset arranges all of the plugin's
- * content components in a distinct layout; the component toggles are set
- * so each slot actually renders after the preset is applied.
+ * Component toggles matching a fresh install of the plugin. The default
+ * layout renders stats, MOC cards, vault activity, heatmap, timeline, file
+ * types, and tasks — but not quick links or the clock.
  */
-export const DASHBOARD_PRESETS: DashboardPreset[] = [
-	{
-		id: "classic-overview",
-		name: "Classic Overview",
-		description:
-			"A balanced start: timeline beside a nested MOC + vault activity block over the heatmap, with tasks and file types below.",
-		rowLayouts: [
-			{
-				id: "preset-classic-row1",
-				name: "Row 1",
-				columns: 1,
-				proportion: "100",
-				align: "center",
-				slots: ["stats"],
-				slotHeadings: {},
-			},
-			{
-				id: "preset-classic-row2",
-				name: "Row 2",
-				columns: 2,
-				proportion: "30/70",
-				align: "top",
-				slots: [
-					"timeline",
-					[
-						{
-							id: "preset-classic-nested",
-							name: "Right",
-							columns: 2,
-							proportion: "60/40",
-							align: "top",
-							slots: [["moc-cards", "quick-links"], "vault-activity"],
-							slotHeadings: {},
-						},
-						"heatmap",
-					],
-				],
-				slotHeadings: {},
-			},
-			{
-				id: "preset-classic-row3",
-				name: "Row 3",
-				columns: 2,
-				proportion: "50/50",
-				align: "top",
-				slots: [["tasks", "clock"], "filetypes"],
-				slotHeadings: {},
-			},
-		],
-		settings: ALL_COMPONENTS_ON,
-	},
-	{
-		id: "moc-first",
-		name: "MOC First",
-		description:
-			"MOC cards take center stage on a wide grid, with the activity feed, clock, and vault activity stacked alongside.",
-		rowLayouts: [
-			{
-				id: "preset-moc-row1",
-				name: "Row 1",
-				columns: 1,
-				proportion: "100",
-				align: "center",
-				slots: ["stats"],
-				slotHeadings: {},
-			},
-			{
-				id: "preset-moc-row2",
-				name: "Row 2",
-				columns: 2,
-				proportion: "70/30",
-				align: "top",
-				slots: ["moc-cards", ["timeline", "clock", "vault-activity"]],
-				slotHeadings: {},
-			},
-			{
-				id: "preset-moc-row3",
-				name: "Row 3",
-				columns: 2,
-				proportion: "50/50",
-				align: "top",
-				slots: [
-					["heatmap", "quick-links"],
-					["filetypes", "tasks"],
-				],
-				slotHeadings: {},
-			},
-		],
-		settings: ALL_COMPONENTS_ON,
-	},
-	{
-		id: "command-center",
-		name: "Command Center",
-		description:
-			"Operations-focused: clock and quick links sit beside a wide timeline, with a nested content block above vault activity.",
-		rowLayouts: [
-			{
-				id: "preset-cmd-row1",
-				name: "Row 1",
-				columns: 1,
-				proportion: "100",
-				align: "center",
-				slots: ["stats"],
-				slotHeadings: {},
-			},
-			{
-				id: "preset-cmd-row2",
-				name: "Row 2",
-				columns: 2,
-				proportion: "25/75",
-				align: "top",
-				slots: [["clock", "quick-links"], "timeline"],
-				slotHeadings: {},
-			},
-			{
-				id: "preset-cmd-row3",
-				name: "Row 3",
-				columns: 2,
-				proportion: "60/40",
-				align: "top",
-				slots: [
-					{
-						id: "preset-cmd-nested",
-						name: "Content",
-						columns: 2,
-						proportion: "50/50",
-						align: "top",
-						slots: [
-							["moc-cards", "heatmap"],
-							["tasks", "filetypes"],
-						],
-						slotHeadings: {},
-					},
-					"vault-activity",
-				],
-				slotHeadings: {},
-			},
-		],
-		settings: ALL_COMPONENTS_ON,
-	},
-	{
-		id: "focused",
-		name: "Focused",
-		description:
-			"A calm, full-width reading flow: timeline and heatmap stacked wide, then a nested MOC + vault block beside quick links and clock.",
-		rowLayouts: [
-			{
-				id: "preset-focus-row1",
-				name: "Row 1",
-				columns: 1,
-				proportion: "100",
-				align: "center",
-				slots: ["stats"],
-				slotHeadings: {},
-			},
-			{
-				id: "preset-focus-row2",
-				name: "Row 2",
-				columns: 1,
-				proportion: "100",
-				align: "top",
-				slots: [["timeline", "heatmap"]],
-				slotHeadings: {},
-			},
-			{
-				id: "preset-focus-row3",
-				name: "Row 3",
-				columns: 2,
-				proportion: "50/50",
-				align: "top",
-				slots: [
-					{
-						id: "preset-focus-nested",
-						name: "Left",
-						columns: 2,
-						proportion: "50/50",
-						align: "top",
-						slots: ["moc-cards", "vault-activity"],
-						slotHeadings: {},
-					},
-					["quick-links", "clock"],
-				],
-				slotHeadings: {},
-			},
-			{
-				id: "preset-focus-row4",
-				name: "Row 4",
-				columns: 2,
-				proportion: "50/50",
-				align: "top",
-				slots: ["tasks", "filetypes"],
-				slotHeadings: {},
-			},
-		],
-		settings: ALL_COMPONENTS_ON,
-	},
-];
+const DEFAULT_COMPONENTS_ON: Partial<NexusSettings> = {
+	...ALL_COMPONENTS_ON,
+	showQuickLinks: false,
+	showClock: false,
+};
+
+/**
+ * Value settings that make up the shipped ("best") default dashboard. Included
+ * alongside the component toggles so restoring {@link DEFAULT_PRESET} also
+ * restores the panel sizes and vault-activity count the plugin ships with.
+ */
+const DEFAULT_PRESET_SETTINGS: Partial<NexusSettings> = {
+	...DEFAULT_COMPONENTS_ON,
+	vaultActivityCount: 50,
+	vaultActivityMaxHeight: 240,
+	activityTimelineMaxHeight: 410,
+	taskSummaryMaxHeight: 120,
+	fileTypeLegendHeight: 120,
+	mocCardsMaxHeight: 240,
+};
+
+/** Stable id of the preset that restores the plugin's shipped layout. */
+export const DEFAULT_PRESET_ID = "nexus-default";
+
+/**
+ * The out-of-box layout the plugin ships with. Restoring it replaces the
+ * current row layout with {@link DEFAULT_ROW_LAYOUTS} and mirrors the
+ * component toggles a fresh install uses.
+ */
+export const DEFAULT_PRESET: DashboardPreset = {
+	id: DEFAULT_PRESET_ID,
+	name: "Default Layout",
+	description:
+		"The layout the plugin ships with: stats across the top, a timeline beside a nested MOC + vault activity block, then tasks and file types below.",
+	rowLayouts: DEFAULT_ROW_LAYOUTS,
+	settings: DEFAULT_PRESET_SETTINGS,
+};
+
+/**
+ * Built-in dashboard presets. The single entry restores the plugin's default
+ * (shipped) layout; its component toggles are set so each slot actually
+ * renders after the preset is applied.
+ */
+export const DASHBOARD_PRESETS: DashboardPreset[] = [DEFAULT_PRESET];
+
+/** True when two optional per-slot override maps carry the same entries. */
+function overridesEqual(
+	a: Record<string, unknown> | undefined,
+	b: Record<string, unknown> | undefined,
+): boolean {
+	if (!a && !b) return true;
+	if (!a || !b) return false;
+	const keysA = Object.keys(a);
+	if (keysA.length !== Object.keys(b).length) return false;
+	return keysA.every((key) => JSON.stringify(a[key]) === JSON.stringify(b[key]));
+}
+
+function rowEquals(a: RowLayoutEntry, b: RowLayoutEntry): boolean {
+	if (a.id !== b.id) return false;
+	if (a.name !== b.name) return false;
+	if (a.columns !== b.columns) return false;
+	if (a.proportion !== b.proportion) return false;
+	if (a.align !== b.align) return false;
+	if (!overridesEqual(a.slotHeadings, b.slotHeadings)) return false;
+	if (!overridesEqual(a.vaultListSlots, b.vaultListSlots)) return false;
+	if (!overridesEqual(a.fileTypeListSlots, b.fileTypeListSlots)) return false;
+	if (!overridesEqual(a.dividerSlots, b.dividerSlots)) return false;
+	if (a.slots.length !== b.slots.length) return false;
+	return a.slots.every((slot, i) => slotEquals(slot, b.slots[i]));
+}
+
+function slotEquals(a: RowLayoutSlot, b: RowLayoutSlot): boolean {
+	if (typeof a === "string" || typeof b === "string") return a === b;
+	if (Array.isArray(a) || Array.isArray(b)) {
+		if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+		return a.every((slot, i) => slotEquals(slot, b[i]));
+	}
+	return rowEquals(a, b);
+}
+
+/**
+ * Structural equality for row layouts, including nested rows and per-slot
+ * override maps. Used to detect which preset (if any) the current dashboard
+ * layout matches — including copies produced by {@link mergeSettings}.
+ */
+export function rowLayoutsEqual(a: RowLayoutEntry[], b: RowLayoutEntry[]): boolean {
+	if (!a || !b || a.length !== b.length) return false;
+	return a.every((row, i) => rowEquals(row, b[i]));
+}

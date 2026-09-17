@@ -195,7 +195,7 @@ describe("renderTimeline", () => {
 
 		const list = el.querySelector<HTMLElement>(".nexus-timeline");
 		expect(list?.classList.contains("nexus-fade-mask")).toBe(true);
-		expect(list?.style.maxHeight).toBe("500px");
+		expect(list?.style.maxHeight).toBe("410px");
 	});
 });
 

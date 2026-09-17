@@ -111,28 +111,30 @@ export function renderHeatmap(
 	// Empty spacer for day-label gutter alignment
 	const gutter = monthRow.createDiv({ cls: "nexus-heatmap-month-spacer" });
 	gutter.style.visibility = "hidden";
-
-	// Group consecutive weeks by month
-	const monthCounts: { month: number; count: number }[] = [];
-	let curMonth = -1;
-	for (let w = 0; w < weeks; w++) {
-		const weekStart = new Date(startDate);
-		weekStart.setDate(weekStart.getDate() + w * 7);
-		const m = weekStart.getMonth();
-		if (m !== curMonth) {
-			monthCounts.push({ month: m, count: 1 });
-			curMonth = m;
-		} else {
-			monthCounts[monthCounts.length - 1].count++;
+	// Anchor each month label to the week column where that month begins
+	// (GitHub-style) instead of centering over a group, so partial months at
+	// the range edges stay aligned with their cells. Months whose 1st falls
+	// before the displayed range are skipped (no label over the leading cut).
+	const monthLabelCol = new Map<number, number>();
+	const dayMs = 86_400_000;
+	const todayMonthKey = today.getFullYear() * 12 + today.getMonth();
+	let cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1, 12, 0, 0);
+	while (cursor.getFullYear() * 12 + cursor.getMonth() <= todayMonthKey) {
+		const offset = Math.round((cursor.getTime() - startDate.getTime()) / dayMs);
+		if (offset >= 0) {
+			const col = Math.floor(offset / 7);
+			if (col >= 0 && col < weeks) monthLabelCol.set(cursor.getMonth(), col);
 		}
+		cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12, 0, 0);
 	}
 
-	let col = 2;
-	for (const g of monthCounts) {
+	const months = Array.from(monthLabelCol.keys());
+	for (let i = 0; i < months.length; i++) {
+		const start = monthLabelCol.get(months[i]) ?? 0;
+		const end = i + 1 < months.length ? (monthLabelCol.get(months[i + 1]) ?? weeks) : weeks;
 		const spacer = monthRow.createDiv({ cls: "nexus-heatmap-month-spacer" });
-		spacer.textContent = monthNames[g.month];
-		spacer.style.gridColumn = `${col} / span ${g.count}`;
-		col += g.count;
+		spacer.textContent = monthNames[months[i]];
+		spacer.style.gridColumn = `${start + 2} / span ${Math.max(1, end - start)}`;
 	}
 
 	// Day labels + grid
@@ -145,7 +147,7 @@ export function renderHeatmap(
 	}
 
 	const gridEl = bodyEl.createDiv({ cls: "nexus-heatmap-grid" });
-	gridEl.style.gridTemplateColumns = `repeat(${weeks}, 1fr)`;
+	gridEl.style.gridTemplateColumns = `repeat(${weeks}, minmax(0, 1fr))`;
 
 	for (let d = 0; d < 7; d++) {
 		for (let w = 0; w < weeks; w++) {
@@ -173,7 +175,17 @@ export function renderHeatmap(
 
 	if (document.body.classList.contains("is-phone")) {
 		requestAnimationFrame(() => {
-			heatmapEl.scrollLeft = heatmapEl.scrollWidth;
+			requestAnimationFrame(() => {
+				const heatRect = heatmapEl.getBoundingClientRect();
+				const todayCell = heatmapEl.querySelector<HTMLElement>(".nexus-heatmap-cell-today");
+				if (todayCell) {
+					const cellRect = todayCell.getBoundingClientRect();
+					const target = cellRect.left - (heatRect.left + heatRect.width - cellRect.width);
+					heatmapEl.scrollLeft += Math.max(0, target);
+				} else {
+					heatmapEl.scrollLeft = heatmapEl.scrollWidth;
+				}
+			});
 		});
 	}
 }

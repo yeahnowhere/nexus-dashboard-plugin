@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createCard } from "../renderer/cards";
+import { renderSection } from "../renderer/sections";
 import { Notice, Menu } from "./helpers/obsidian-mock";
 import { makeContext } from "./helpers/render-context";
 import type { CardConfig } from "../types";
@@ -133,5 +134,62 @@ describe("createCard", () => {
 		expect(titles).toContain("Copy path");
 		expect(titles).not.toContain("Move up");
 		expect(titles).not.toContain("Move down");
+	});
+});
+
+describe("renderSection", () => {
+	it("wraps the MOC grid in a unified panel", () => {
+		const sectionEl = document.createElement("div");
+		renderSection(makeContext(), sectionEl, {
+			kind: "section",
+			columns: 2,
+			cards: [makeCard()],
+			divider: undefined,
+		});
+
+		const grid = sectionEl.querySelector(".nexus-grid");
+		expect(grid?.parentElement?.classList.contains("nexus-panel")).toBe(true);
+		expect(grid?.parentElement?.classList.contains("nexus-moc-panel")).toBe(true);
+	});
+
+	it("wraps the mini grid in the panel too", () => {
+		const sectionEl = document.createElement("div");
+		renderSection(makeContext(), sectionEl, {
+			kind: "section",
+			columns: 3,
+			cards: [makeCard({ type: "mini", desc: undefined })],
+			divider: undefined,
+		});
+
+		const grid = sectionEl.querySelector(".nexus-mini-grid");
+		expect(grid?.parentElement?.classList.contains("nexus-moc-panel")).toBe(true);
+	});
+
+	it("sets the grid height from the section height", () => {
+		const sectionEl = document.createElement("div");
+		renderSection(makeContext(), sectionEl, {
+			kind: "section",
+			columns: 2,
+			height: 320,
+			cards: [makeCard()],
+			divider: undefined,
+		});
+
+		const grid = sectionEl.querySelector<HTMLElement>(".nexus-grid");
+		expect(grid?.style.height).toBe("320px");
+	});
+
+	it("leaves the grid uncapped when the section height is 0 (Auto)", () => {
+		const sectionEl = document.createElement("div");
+		renderSection(makeContext(), sectionEl, {
+			kind: "section",
+			columns: 2,
+			height: 0,
+			cards: [makeCard()],
+			divider: undefined,
+		});
+
+		const grid = sectionEl.querySelector<HTMLElement>(".nexus-grid");
+		expect(grid?.style.height).toBe("");
 	});
 });

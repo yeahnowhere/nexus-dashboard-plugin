@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { DASHBOARD_PRESETS, PRESET_COMPONENTS } from "../presets";
-import { mergeSettings } from "../defaults";
+import {
+	DASHBOARD_PRESETS,
+	DEFAULT_PRESET_ID,
+	PRESET_COMPONENTS,
+	rowLayoutsEqual,
+} from "../presets";
+import { DEFAULT_ROW_LAYOUTS, mergeSettings } from "../defaults";
 import type { NexusSettings, RowLayoutEntry, RowLayoutSlot } from "../types";
 
 const VALID_SLOT_TYPES = new Set<string>([
@@ -48,9 +53,18 @@ function countNestedRows(rows: RowLayoutEntry[]): number {
 	return count;
 }
 
+/** Components the default layout intentionally omits (fresh-install state). */
+const SKIP_FOR_DEFAULT = new Set<string>(["quick-links", "clock"]);
+
+/** True when a preset is the default (shipped) layout. */
+function isDefaultPreset(preset: { id: string }): boolean {
+	return preset.id === DEFAULT_PRESET_ID;
+}
+
 describe("DASHBOARD_PRESETS", () => {
-	it("exports the four built-in presets", () => {
-		expect(DASHBOARD_PRESETS).toHaveLength(4);
+	it("exports only the default preset", () => {
+		expect(DASHBOARD_PRESETS).toHaveLength(1);
+		expect(DASHBOARD_PRESETS[0].id).toBe(DEFAULT_PRESET_ID);
 	});
 
 	it("gives every preset a unique id and a name and description", () => {
@@ -66,9 +80,30 @@ describe("DASHBOARD_PRESETS", () => {
 		for (const preset of DASHBOARD_PRESETS) {
 			const found = collectRowSlots(preset.rowLayouts);
 			for (const component of PRESET_COMPONENTS) {
+				if (isDefaultPreset(preset) && SKIP_FOR_DEFAULT.has(component)) continue;
 				expect(found.has(component), `${preset.id} is missing ${component}`).toBe(true);
 			}
 		}
+	});
+
+	it("mirrors the shipped layout in the default preset", () => {
+		const preset = DASHBOARD_PRESETS.find(isDefaultPreset);
+		expect(preset).toBeDefined();
+		expect(preset?.rowLayouts).toEqual(DEFAULT_ROW_LAYOUTS);
+		const slots = collectRowSlots(preset?.rowLayouts ?? []);
+		expect(slots.has("quick-links")).toBe(false);
+		expect(slots.has("clock")).toBe(false);
+		expect(preset?.settings?.showStats).toBe(true);
+		expect(preset?.settings?.showMocCards).toBe(true);
+		expect(preset?.settings?.showQuickLinks).toBe(false);
+		expect(preset?.settings?.showClock).toBe(false);
+		expect(preset?.settings?.showTaskSummary).toBe(true);
+		expect(preset?.settings?.vaultActivityCount).toBe(50);
+		expect(preset?.settings?.vaultActivityMaxHeight).toBe(240);
+		expect(preset?.settings?.activityTimelineMaxHeight).toBe(410);
+		expect(preset?.settings?.taskSummaryMaxHeight).toBe(120);
+		expect(preset?.settings?.fileTypeLegendHeight).toBe(120);
+		expect(preset?.settings?.mocCardsMaxHeight).toBe(240);
 	});
 
 	it("uses only valid slot types, aligns, and row proportions", () => {
@@ -135,6 +170,10 @@ describe("DASHBOARD_PRESETS", () => {
 													? "FileTypeChart"
 													: "TaskSummary"
 				}` as keyof NexusSettings;
+				if (isDefaultPreset(preset) && SKIP_FOR_DEFAULT.has(component)) {
+					expect(settings[toggle], `${preset.id} should keep ${toggle} off`).toBe(false);
+					continue;
+				}
 				expect(settings[toggle], `${preset.id} should enable ${toggle}`).toBe(true);
 			}
 		}
@@ -156,8 +195,8 @@ describe("DASHBOARD_PRESETS", () => {
 
 	it("clears column layouts when applied", () => {
 		const applied = mergeSettings({
-			...DASHBOARD_PRESETS[2].settings,
-			rowLayouts: DASHBOARD_PRESETS[2].rowLayouts,
+			...DASHBOARD_PRESETS[0].settings,
+			rowLayouts: DASHBOARD_PRESETS[0].rowLayouts,
 			columnLayouts: [],
 		});
 		expect(applied.columnLayouts).toEqual([]);
@@ -177,5 +216,29 @@ describe("PRESET_COMPONENTS", () => {
 			"filetypes",
 			"tasks",
 		]);
+	});
+});
+
+describe("rowLayoutsEqual", () => {
+	it("matches a fresh-install deep clone of the default layout", () => {
+		const freshInstall = mergeSettings(null).rowLayouts;
+		expect(rowLayoutsEqual(freshInstall, DEFAULT_ROW_LAYOUTS)).toBe(true);
+	});
+
+	it("matches a preset layout that went through mergeSettings", () => {
+		const applied = mergeSettings({ rowLayouts: DASHBOARD_PRESETS[0].rowLayouts });
+		expect(rowLayoutsEqual(applied.rowLayouts, DASHBOARD_PRESETS[0].rowLayouts)).toBe(true);
+	});
+
+	it("rejects layouts with different rows or slots", () => {
+		const tweaked = structuredClone(DEFAULT_ROW_LAYOUTS);
+		(tweaked[0].slots[0] as RowLayoutSlot) = "heatmap";
+		expect(rowLayoutsEqual(DEFAULT_ROW_LAYOUTS, tweaked)).toBe(false);
+		expect(rowLayoutsEqual(DASHBOARD_PRESETS[0].rowLayouts, DEFAULT_ROW_LAYOUTS)).toBe(true);
+	});
+
+	it("is false for mismatched length or undefined input", () => {
+		expect(rowLayoutsEqual([], [DEFAULT_ROW_LAYOUTS[0]])).toBe(false);
+		expect(rowLayoutsEqual(DEFAULT_ROW_LAYOUTS, [] as RowLayoutEntry[])).toBe(false);
 	});
 });

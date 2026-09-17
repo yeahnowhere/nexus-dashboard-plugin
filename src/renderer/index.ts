@@ -331,6 +331,7 @@ export class NexusRenderer extends MarkdownRenderChild {
 						return {
 							kind: "section",
 							columns: opts.mocGridColumns,
+							height: opts.mocCardsMaxHeight,
 							cards: opts.mocs.map((moc) => ({
 								type: "big" as const,
 								label: moc.title,
@@ -555,7 +556,7 @@ export class NexusRenderer extends MarkdownRenderChild {
 						columnChildren.length > 0
 							? {
 									kind: "column",
-									spacing: "0.5rem",
+									spacing: "0.25rem",
 									children: columnChildren as ColumnConfig["children"],
 								}
 							: { kind: "section", columns: 1, cards: [] },

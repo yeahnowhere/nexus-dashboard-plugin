@@ -26,7 +26,12 @@ export function renderSection(
 		hasMini && !hasBig
 			? `nexus-mini-grid nexus-mini-grid--cols-${section.columns}`
 			: `nexus-grid nexus-grid--cols-${section.columns}`;
-	const gridEl = sectionEl.createDiv({ cls: gridCls });
+	const panelEl = sectionEl.createDiv({ cls: "nexus-panel nexus-moc-panel" });
+	const gridEl = panelEl.createDiv({ cls: gridCls });
+	const height = section.height ?? 0;
+	if (height > 0) {
+		gridEl.style.height = `${height}px`;
+	}
 
 	for (const cardConfig of section.cards) {
 		const cardEl = createCard(ctx, cardConfig);

@@ -35,7 +35,12 @@ import {
 	deepCloneDefaults,
 	mergeSettings,
 } from "../defaults";
-import { DASHBOARD_PRESETS, type DashboardPreset } from "../presets";
+import {
+	DASHBOARD_PRESETS,
+	DEFAULT_PRESET_ID,
+	rowLayoutsEqual,
+	type DashboardPreset,
+} from "../presets";
 import { safeParseInt } from "../utils";
 import { statSummary } from "../stats";
 import { ConfirmModal } from "./confirm-modal";
@@ -812,90 +817,55 @@ export class NexusSettingTab extends PluginSettingTab {
 	// ═══════════════════════════════════════════════════════
 
 	private displayPresetsTab(containerEl: HTMLElement): void {
-		containerEl.createEl("p", {
-			text:
-				"Apply a preloaded dashboard layout with one click. Presets include every component and never touch your MOC cards, stats, vault lists, or quick links.",
-			cls: "setting-item-description",
-		});
-
-		const grid = containerEl.createDiv({ cls: "nexus-preset-grid" });
+		const list = containerEl.createDiv({ cls: "nexus-preset-list" });
+		const activeId = this.activePresetId();
 		for (const preset of DASHBOARD_PRESETS) {
-			this.renderPresetCard(grid, preset);
+			this.renderPresetRow(list, preset, preset.id === activeId);
 		}
 	}
 
-	private renderPresetCard(containerEl: HTMLElement, preset: DashboardPreset): void {
-		const card = containerEl.createDiv({ cls: "nexus-preset-card" });
+	/** Id of the preset currently in use, or null when the layout is custom. */
+	private activePresetId(): string | null {
+		const current = this.plugin.settings.rowLayouts;
+		for (const preset of DASHBOARD_PRESETS) {
+			if (rowLayoutsEqual(current, preset.rowLayouts)) return preset.id;
+		}
+		return null;
+	}
 
-		const header = card.createDiv({ cls: "nexus-preset-card-header" });
-		header.createEl("h3", { text: preset.name, cls: "nexus-preset-name" });
+	private renderPresetRow(
+		containerEl: HTMLElement,
+		preset: DashboardPreset,
+		isActive: boolean,
+	): void {
+		const row = containerEl.createDiv({ cls: "nexus-preset-row-card" });
+		if (isActive) row.addClass("is-active");
+
+		const info = row.createDiv({ cls: "nexus-preset-info" });
+		const titleWrap = info.createDiv({ cls: "nexus-preset-title-wrap" });
+		titleWrap.createEl("span", { text: preset.name, cls: "nexus-preset-name" });
+
+		if (isActive) {
+			titleWrap.createEl("span", { text: "Active", cls: "nexus-preset-badge is-active" });
+		} else if (preset.id === DEFAULT_PRESET_ID) {
+			titleWrap.createEl("span", { text: "Default", cls: "nexus-preset-badge is-default" });
+		}
 
 		if (preset.description) {
-			card.createEl("p", { text: preset.description, cls: "nexus-preset-desc" });
+			info.createEl("p", { text: preset.description, cls: "nexus-preset-desc" });
 		}
 
-		// Mini schematic of the layout
-		const schematic = card.createDiv({ cls: "nexus-preset-schematic" });
-		for (const row of preset.rowLayouts) {
-			const rowEl = schematic.createDiv({ cls: "nexus-preset-row" });
-			const proportions = row.proportion.split("/");
-			for (let i = 0; i < row.columns; i++) {
-				const slot = row.slots?.[i] ?? "none";
-				const colEl = rowEl.createDiv({ cls: "nexus-preset-col" });
-				colEl.style.flexBasis = `${parseFloat(proportions[i] ?? "100")}%`;
-				const labels = this.collectSlotLabels(slot);
-				for (const label of labels) {
-					colEl.createEl("span", { text: label, cls: "nexus-preset-col-label" });
-				}
-			}
-		}
-
-		// Component chips
-		const chips = card.createDiv({ cls: "nexus-preset-chips" });
-		const components = this.collectPresetComponents(preset);
-		for (const component of components) {
-			chips.createEl("span", {
-				text: CONTENT_SLOT_OPTIONS[component] || component,
-				cls: "nexus-preset-chip",
+		const actions = row.createDiv({ cls: "nexus-preset-actions" });
+		if (isActive) {
+			actions.createEl("button", {
+				text: "Using this layout",
+				attr: { disabled: "disabled" },
 			});
-		}
-
-		// Apply action
-		const actions = card.createDiv({ cls: "nexus-preset-actions" });
-		actions
-			.createEl("button", { text: "Apply layout", cls: "mod-cta" })
-			.addEventListener("click", () => {
+		} else {
+			actions.createEl("button", { text: "Apply", cls: "mod-cta" }).addEventListener("click", () => {
 				this.applyPreset(preset);
 			});
-	}
-
-	/** Flatten a slot into a short list of display labels for the schematic. */
-	private collectSlotLabels(slot: RowLayoutSlot): string[] {
-		if (typeof slot === "string") return [CONTENT_SLOT_OPTIONS[slot] || slot];
-		if (Array.isArray(slot)) return slot.flatMap((sub) => this.collectSlotLabels(sub));
-		return this.collectSlotLabels(slot.slots[0] ?? "none");
-	}
-
-	/** Collect every distinct content component referenced by a preset's rows. */
-	private collectPresetComponents(preset: DashboardPreset): ContentSlotType[] {
-		const found = new Set<ContentSlotType>();
-		const scan = (slot: RowLayoutSlot): void => {
-			if (typeof slot === "string") {
-				if (slot !== "none" && slot !== "divider" && slot !== "heading") {
-					found.add(slot as ContentSlotType);
-				}
-				return;
-			}
-			if (Array.isArray(slot)) {
-				for (const sub of slot) scan(sub);
-				return;
-			}
-			for (const sub of slot.slots) scan(sub);
-		};
-		for (const row of preset.rowLayouts) {
-			for (const slot of row.slots) scan(slot);
 		}
-		return Array.from(found);
 	}
 
 	/** Replace the current layout with a preset, keeping the user's own content. */
@@ -2367,6 +2337,22 @@ export class NexusSettingTab extends PluginSettingTab {
 							.setDynamicTooltip()
 							.onChange(async (value) => {
 								this.plugin.settings.mocGridColumns = value;
+								await this.plugin.saveSettings();
+							}),
+					);
+
+				new Setting(body)
+					.setName("MOC cards tray height")
+					.setDesc(
+						"0 = Auto (fits your cards); otherwise the tray height (px) — cards scroll when they exceed it",
+					)
+					.addSlider((slider) =>
+						slider
+							.setLimits(0, 800, 20)
+							.setValue(this.plugin.settings.mocCardsMaxHeight)
+							.setDynamicTooltip()
+							.onChange(async (value) => {
+								this.plugin.settings.mocCardsMaxHeight = value;
 								await this.plugin.saveSettings();
 							}),
 					);

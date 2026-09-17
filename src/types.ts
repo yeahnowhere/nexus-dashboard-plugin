@@ -115,6 +115,8 @@ export interface SectionConfig {
 	cards: CardConfig[];
 	/** Optional divider rendered above or below this section. */
 	divider?: DividerBlockConfig;
+	/** Optional height (px) of the card tray; `0`/absent = Auto (fit cards). */
+	height?: number;
 }
 
 /** A single clickable card linking to a vault path. */
@@ -576,6 +578,8 @@ export interface NexusSettings {
 	showGraph: boolean;
 	/** Number of grid columns for large MOC cards. */
 	mocGridColumns: number;
+	/** Maximum height of the MOC cards grid before scrolling (px). */
+	mocCardsMaxHeight: number;
 	/** Visual styling applied to all divider lines. */
 	dividerDesign: DividerDesign;
 	/** CSS font-family string for the ASCII header text. */

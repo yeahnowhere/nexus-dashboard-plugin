@@ -15,7 +15,7 @@ export function getFilteredFiles(
 	let files = ctx.app.vault.getMarkdownFiles();
 
 	if (config.path) {
-		const paths = splitCsv(config.path).map((p) => p.toLowerCase());
+		const paths = splitCsv(config.path).map((p) => p.replace(/\/+$/, "").toLowerCase());
 		files = files.filter((f) => {
 			const pathLower = f.path.toLowerCase();
 			return paths.some((p) => pathLower.startsWith(p + "/") || pathLower === p);
