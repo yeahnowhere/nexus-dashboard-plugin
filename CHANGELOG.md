@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Unified card panels** — all widgets (clock, heatmap, timeline, vault activity, task summary, file types, quick links) now render inside bordered card panels matching the MOC card style
+- **Timeline** — the "Show more" button and its `count` / `showMore` options were removed; the full filtered event list now renders (scroll + fade mask retained)
+- **File-type chart** — the fixed color palette is now a theme-accent ramp (`color-mix`), so the chart adapts to any theme or accent color
+
 ## v1.3.1 — 2026-09-02
 
 ### Fixed

@@ -33,6 +33,7 @@ describe("renderTimeline", () => {
 		renderTimeline(ctx, el, makeConfig({ label: "CHANGELOG" }));
 
 		expect(el.querySelector(".nexus-timeline-root .nexus-section")).not.toBeNull();
+		expect(el.querySelector(".nexus-timeline-root .nexus-panel")).not.toBeNull();
 		expect(el.querySelector(".nexus-section-divider-label")?.textContent).toBe("CHANGELOG");
 	});
 
@@ -168,7 +169,7 @@ describe("renderTimeline", () => {
 		expect(rows[0]?.querySelector(".nexus-timeline-badge")?.textContent).toBe("+1");
 	});
 
-	it("reveals more entries when Show more is clicked", () => {
+	it("renders all events without a Show more button", () => {
 		const ctx = makeContext({
 			settings: {
 				activityLog: [
@@ -179,15 +180,10 @@ describe("renderTimeline", () => {
 			},
 		});
 		const el = host();
-		renderTimeline(ctx, el, makeConfig({ showDate: false, count: 1 }));
+		renderTimeline(ctx, el, makeConfig({ showDate: false }));
 
-		expect(el.querySelectorAll(".nexus-timeline-row").length).toBe(1);
-		const more = el.querySelector<HTMLElement>(".nexus-timeline-more");
-		expect(more?.textContent).toBe("Show more (2 more)");
-
-		more?.click();
-		expect(el.querySelectorAll(".nexus-timeline-row").length).toBe(2);
-		expect(el.querySelector(".nexus-timeline-more")?.textContent).toBe("Show more (1 more)");
+		expect(el.querySelectorAll(".nexus-timeline-row").length).toBe(3);
+		expect(el.querySelector(".nexus-timeline-more")).toBeNull();
 	});
 
 	it("applies the fade mask and max-height", () => {

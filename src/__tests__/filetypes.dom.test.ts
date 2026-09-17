@@ -29,6 +29,7 @@ describe("renderFileTypeChart", () => {
 
 		const bar = el.querySelector<HTMLElement>(".nexus-filetypes-bar");
 		expect(bar).not.toBeNull();
+		expect(el.querySelector(".nexus-panel .nexus-filetypes")).not.toBeNull();
 		expect(bar?.querySelectorAll(".nexus-filetypes-bar-segment").length).toBe(5);
 
 		const total = el.querySelector(".nexus-filetypes-total");

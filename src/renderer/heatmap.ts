@@ -82,7 +82,9 @@ export function renderHeatmap(
 		renderDivider(ctx, wrapper, label);
 	}
 
-	const heatmapEl = wrapper.createDiv({ cls: "nexus-heatmap" });
+	const panel = wrapper.createDiv({ cls: "nexus-panel" });
+
+	const heatmapEl = panel.createDiv({ cls: "nexus-heatmap" });
 	heatmapEl.style.setProperty("--nexus-heatmap-weeks", String(weeks));
 
 	// Month labels row — one spanned label per month

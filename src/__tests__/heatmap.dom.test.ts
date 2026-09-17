@@ -65,6 +65,7 @@ describe("renderHeatmap", () => {
 
 		const heatmap = el.querySelector<HTMLElement>(".nexus-heatmap");
 		expect(heatmap).not.toBeNull();
+		expect(el.querySelector(".nexus-panel .nexus-heatmap")).not.toBeNull();
 		expect(heatmap?.style.getPropertyValue("--nexus-heatmap-weeks")).toBe("4");
 		const grid = heatmap?.querySelector<HTMLElement>(".nexus-heatmap-grid");
 		expect(grid?.querySelectorAll(".nexus-heatmap-cell").length).toBe(28);

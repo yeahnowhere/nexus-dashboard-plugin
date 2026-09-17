@@ -2728,21 +2728,6 @@ export class NexusSettingTab extends PluginSettingTab {
 				await this.plugin.saveSettings();
 			},
 			(body) => {
-				const displayGroup = this.renderSubgroup(body, "Display");
-				new Setting(displayGroup)
-					.setName("Number of entries")
-					.setDesc("How many activity entries to show")
-					.addSlider((slider) =>
-						slider
-							.setLimits(5, 50, 1)
-							.setValue(this.plugin.settings.activityTimelineCount)
-							.setDynamicTooltip()
-							.onChange(async (value) => {
-								this.plugin.settings.activityTimelineCount = value;
-								await this.plugin.saveSettings();
-							}),
-					);
-
 				const listGroup = this.renderSubgroup(body, "List appearance");
 				new Setting(listGroup)
 					.setName("Show fade mask")
@@ -2784,16 +2769,6 @@ export class NexusSettingTab extends PluginSettingTab {
 					.addToggle((toggle) =>
 						toggle.setValue(this.plugin.settings.activityTimelineShowDate).onChange(async (value) => {
 							this.plugin.settings.activityTimelineShowDate = value;
-							await this.plugin.saveSettings();
-						}),
-					);
-
-				new Setting(listGroup)
-					.setName('Show "load more" button')
-					.setDesc("Show a button to load more entries beyond the count")
-					.addToggle((toggle) =>
-						toggle.setValue(this.plugin.settings.activityTimelineShowMore).onChange(async (value) => {
-							this.plugin.settings.activityTimelineShowMore = value;
 							await this.plugin.saveSettings();
 						}),
 					);

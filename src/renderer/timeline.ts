@@ -55,7 +55,10 @@ export function timelineDayInfo(time: number): { key: string; label: string } {
 	};
 }
 
-/** Render a timeline block with a self-contained refresh scope. */
+/** Fixed bound on files backfilled from recent vault activity when the log is empty. */
+const TIMELINE_BACKFILL_CAP = 500;
+
+/** Render a timeline block showing the full filtered event list. */
 export function renderTimeline(
 	ctx: RendererContext,
 	containerEl: HTMLElement,
@@ -65,37 +68,22 @@ export function renderTimeline(
 	const label =
 		config.label ||
 		(opts.showActivityTimelineDivider ? opts.activityTimelineLabel || "ACTIVITY" : "");
-	const baseCount = config.count || opts.activityTimelineCount || 20;
-	const state: { base: number; displayed: number } = {
-		base: baseCount,
-		displayed: baseCount,
-	};
 
-	// Scope refreshes to this block so "Show more" doesn't wipe
-	// the other sections of the dashboard.
 	const root = containerEl.createDiv({ cls: "nexus-timeline-root" });
-
-	const build = () => {
-		root.empty();
-		const wrapper = root.createDiv({ cls: "nexus-section" });
-		if (label) {
-			renderDivider(ctx, wrapper, label);
-		}
-		renderTimelineBody(ctx, wrapper, config, state, build);
-	};
-
-	build();
+	const wrapper = root.createDiv({ cls: "nexus-section" });
+	if (label) {
+		renderDivider(ctx, wrapper, label);
+	}
+	const panel = wrapper.createDiv({ cls: "nexus-panel" });
+	renderTimelineBody(ctx, panel, config);
 }
 
 function renderTimelineBody(
 	ctx: RendererContext,
 	wrapper: HTMLElement,
 	config: TimelineConfig,
-	state: { base: number; displayed: number },
-	refresh: () => void,
 ): void {
 	const opts = ctx.settings;
-	const showMore = config.showMore ?? opts.activityTimelineShowMore;
 	const group = config.group || opts.activityTimelineGroup || "day";
 
 	const events = buildTimelineEventsFor(ctx, config);
@@ -113,24 +101,10 @@ function renderTimelineBody(
 	});
 	listEl.style.maxHeight = `${opts.activityTimelineMaxHeight}px`;
 
-	const limit = Math.min(state.displayed, events.length);
-	const slice = events.slice(0, limit);
-
 	if (group === "file") {
-		renderTimelineByFile(ctx, listEl, slice, config);
+		renderTimelineByFile(ctx, listEl, events, config);
 	} else {
-		renderTimelineByDay(ctx, listEl, slice, config);
-	}
-
-	if (showMore && events.length > limit) {
-		const moreEl = wrapper.createEl("button", {
-			cls: "nexus-timeline-more",
-			text: `Show more (${events.length - limit} more)`,
-		});
-		moreEl.addEventListener("click", () => {
-			state.displayed += state.base;
-			refresh();
-		});
+		renderTimelineByDay(ctx, listEl, events, config);
 	}
 }
 
@@ -148,7 +122,6 @@ export function buildTimelineEventsFor(
 	const excludeFolders = config.exclude || [];
 	const excludeExt = config.excludeExt || [];
 	const types = config.types || [];
-	const count = config.count || opts.activityTimelineCount || 20;
 
 	return buildTimelineEventsBase(
 		{
@@ -159,7 +132,7 @@ export function buildTimelineEventsFor(
 				mtime: f.stat.mtime,
 			})),
 		},
-		{ onlyMarkdown, include, excludeFolders, excludeExt, types, count },
+		{ onlyMarkdown, include, excludeFolders, excludeExt, types, count: TIMELINE_BACKFILL_CAP },
 	);
 }
 

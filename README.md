@@ -217,13 +217,12 @@ heatmap:
 ### Activity Timeline
 A chronological log of vault activity — created, modified, deleted, renamed/moved, opened, task, and folder events — with day or file grouping, relative times, and date chips. `MODIFIED` events update live as you edit; external renames are recovered via delete+create pairing and startup mtime reconciliation, so they appear as `renamed` instead of a spurious delete.
 
-Properties: `show` (true/false), `count` (integer), `label`, `exclude` (comma-separated folders), `include` (comma-separated folders), `excludeExt` (comma-separated extensions), `types` (comma-separated actions, e.g. `created,deleted`), `onlyMarkdown` (true/false), `group` (day/file), `relative` (true/false), `showDate` (true/false), `showChips` (true/false), `showMore` (true/false)
+Properties: `show` (true/false), `label`, `exclude` (comma-separated folders), `include` (comma-separated folders), `excludeExt` (comma-separated extensions), `types` (comma-separated actions, e.g. `created,deleted`), `onlyMarkdown` (true/false), `group` (day/file), `relative` (true/false), `showDate` (true/false), `showChips` (true/false)
 
 ````
 ```nexus-dashboard
 timeline:
   show: true
-  count: 20
   group: day
   showChips: true
   relative: true

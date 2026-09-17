@@ -434,7 +434,7 @@ column:
   - heatmap:
       weeks: 12
   - timeline:
-      count: 8
+      label: RECENT
 `);
 		expect(config.blocks).toHaveLength(1);
 		const column = config.blocks[0];
@@ -448,7 +448,7 @@ column:
 			}
 			expect(timeline.kind).toBe("timeline");
 			if (timeline.kind === "timeline") {
-				expect(timeline.count).toBe(8);
+				expect(timeline.label).toBe("RECENT");
 			}
 		}
 	});
@@ -494,7 +494,6 @@ section:
 		const config = parseDashboard(`
 timeline:
   show: true
-  count: 10
   label: RECENT
   exclude: Journal
   excludeExt: .png, .jpg
@@ -504,14 +503,12 @@ timeline:
   group: file
   relative: true
   showDate: false
-  showMore: false
 `);
 		expect(config.blocks).toHaveLength(1);
 		const timeline = config.blocks[0];
 		expect(timeline.kind).toBe("timeline");
 		if (timeline.kind === "timeline") {
 			expect(timeline.show).toBe(true);
-			expect(timeline.count).toBe(10);
 			expect(timeline.label).toBe("RECENT");
 			expect(timeline.exclude).toEqual(["Journal"]);
 			expect(timeline.excludeExt).toEqual([".png", ".jpg"]);
@@ -521,7 +518,6 @@ timeline:
 			expect(timeline.group).toBe("file");
 			expect(timeline.relative).toBe(true);
 			expect(timeline.showDate).toBe(false);
-			expect(timeline.showMore).toBe(false);
 		}
 	});
 

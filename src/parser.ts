@@ -767,10 +767,6 @@ function applyHeatmapKV(heatmap: HeatmapConfig, kv: { key: string; value: string
 
 function applyTimelineKV(timeline: TimelineConfig, kv: { key: string; value: string }) {
 	if (kv.key === "show") timeline.show = kv.value === "true";
-	if (kv.key === "count") {
-		const n = parseInt(kv.value, 10);
-		timeline.count = Number.isFinite(n) && n > 0 ? n : undefined;
-	}
 	if (kv.key === "label") timeline.label = kv.value;
 	if (kv.key === "exclude") {
 		timeline.exclude = splitCsv(kv.value);
@@ -790,7 +786,6 @@ function applyTimelineKV(timeline: TimelineConfig, kv: { key: string; value: str
 	}
 	if (kv.key === "relative") timeline.relative = kv.value === "true";
 	if (kv.key === "showDate") timeline.showDate = kv.value === "true";
-	if (kv.key === "showMore") timeline.showMore = kv.value === "true";
 }
 
 function applyClockKV(clock: ClockConfig, kv: { key: string; value: string }) {

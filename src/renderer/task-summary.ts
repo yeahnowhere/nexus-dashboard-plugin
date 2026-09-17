@@ -88,7 +88,9 @@ export async function renderTaskSummary(
 		renderDivider(ctx, wrapper, label);
 	}
 
-	const taskEl = wrapper.createDiv({ cls: "nexus-tasks" });
+	const panel = wrapper.createDiv({ cls: "nexus-panel" });
+
+	const taskEl = panel.createDiv({ cls: "nexus-tasks" });
 
 	// Empty state
 	if (total === 0) {

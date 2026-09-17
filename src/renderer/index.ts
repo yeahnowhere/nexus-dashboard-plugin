@@ -449,7 +449,6 @@ export class NexusRenderer extends MarkdownRenderChild {
 					return {
 						kind: "timeline",
 						show: true,
-						count: opts.activityTimelineCount,
 						label: opts.showActivityTimelineDivider ? opts.activityTimelineLabel : undefined,
 					} as TimelineConfig;
 				case "clock":

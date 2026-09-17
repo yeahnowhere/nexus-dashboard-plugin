@@ -31,6 +31,7 @@ describe("renderLinks", () => {
 
 		const pills = el.querySelectorAll<HTMLAnchorElement>(".nexus-link-pill");
 		expect(pills.length).toBe(2);
+		expect(el.querySelector(".nexus-panel .nexus-link-pill")).not.toBeNull();
 		expect(pills[0]?.href).toBe("https://example.com/");
 		expect(pills[0]?.target).toBe("_blank");
 		expect(pills[0]?.rel).toBe("noopener");

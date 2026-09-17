@@ -52,7 +52,9 @@ export function renderFileTypeChart(
 		renderDivider(ctx, wrapper, label);
 	}
 
-	const root = wrapper.createDiv({ cls: "nexus-filetypes" });
+	const panel = wrapper.createDiv({ cls: "nexus-panel" });
+
+	const root = panel.createDiv({ cls: "nexus-filetypes" });
 
 	root.createDiv({ cls: "nexus-filetypes-total", text: `${total} files` });
 

@@ -24,6 +24,7 @@ describe("renderClock", () => {
 
 		expect(el.querySelector(".nexus-clock-time")).not.toBeNull();
 		expect(el.querySelector(".nexus-clock-date")).not.toBeNull();
+		expect(el.querySelector(".nexus-panel .nexus-clock")).not.toBeNull();
 		expect(ctx.registerClockInterval).toHaveBeenCalledTimes(1);
 		expect(el.querySelector(".nexus-clock-tz")).toBeNull();
 	});

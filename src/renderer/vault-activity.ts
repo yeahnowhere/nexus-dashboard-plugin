@@ -62,7 +62,9 @@ export function renderVaultActivity(
 	if (label) renderDivider(ctx, wrapperEl, label);
 
 	// Compact file list
-	const listEl = wrapperEl.createDiv({
+	const panelEl = wrapperEl.createDiv({ cls: "nexus-panel" });
+
+	const listEl = panelEl.createDiv({
 		cls: `nexus-vault-activity${opts.vaultActivityShowFade ? " nexus-fade-mask" : ""}`,
 	});
 	listEl.style.maxHeight = `${opts.vaultActivityMaxHeight}px`;

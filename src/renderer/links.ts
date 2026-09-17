@@ -16,7 +16,9 @@ export function renderLinks(
 		renderDivider(ctx, wrapper, links.title);
 	}
 
-	const pillsEl = wrapper.createDiv({ cls: "nexus-links-pills" });
+	const panel = wrapper.createDiv({ cls: "nexus-panel" });
+
+	const pillsEl = panel.createDiv({ cls: "nexus-links-pills" });
 
 	for (const item of links.items) {
 		const pill = pillsEl.createEl("a", { cls: "nexus-link-pill" });

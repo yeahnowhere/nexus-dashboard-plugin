@@ -73,6 +73,7 @@ describe("renderTaskSummary", () => {
 			(n) => n.textContent,
 		);
 		expect(values).toEqual(["5", "1", "4", "20%"]);
+		expect(el.querySelector(".nexus-panel .nexus-tasks")).not.toBeNull();
 
 		const fill = el.querySelector<HTMLElement>(".nexus-tasks-progress-fill");
 		expect(fill?.style.width).toBe("20%");

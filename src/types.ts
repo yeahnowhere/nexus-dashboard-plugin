@@ -306,8 +306,6 @@ export interface ActivityEvent {
 export interface TimelineConfig {
 	kind: "timeline";
 	show: boolean;
-	/** Maximum number of timeline entries to display. */
-	count?: number;
 	/** Custom heading label displayed above the timeline. */
 	label?: string;
 	/** Vault-relative folder paths to exclude from timeline entries. */
@@ -326,8 +324,6 @@ export interface TimelineConfig {
 	relative?: boolean;
 	/** Show day separators ("Today", "Yesterday", date). */
 	showDate?: boolean;
-	/** Show a "load more" button when entries exceed the count. */
-	showMore?: boolean;
 }
 
 /** Configuration for the live clock widget. */
@@ -637,8 +633,6 @@ export interface NexusSettings {
 	showActivityTimeline: boolean;
 	/** Whether a divider is shown above the activity timeline. */
 	showActivityTimelineDivider: boolean;
-	/** Maximum number of entries in the activity timeline. */
-	activityTimelineCount: number;
 	/** Custom heading label for the activity timeline. */
 	activityTimelineLabel: string;
 	/** Whether the live clock widget is visible. */
@@ -717,8 +711,6 @@ export interface NexusSettings {
 	activityTimelineGroup: "day" | "file";
 	/** Show day separators in the activity timeline. */
 	activityTimelineShowDate: boolean;
-	/** Show a "load more" button when entries exceed the count. */
-	activityTimelineShowMore: boolean;
 	/** Whether the task summary list shows the bottom fade mask. */
 	taskSummaryShowFade: boolean;
 	/** Maximum height of the task summary list before scrolling (px). */

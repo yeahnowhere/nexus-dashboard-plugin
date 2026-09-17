@@ -18,7 +18,9 @@ export function renderClock(
 		renderDivider(ctx, containerEl, label);
 	}
 
-	const clockEl = containerEl.createDiv({ cls: "nexus-clock" });
+	const panel = containerEl.createDiv({ cls: "nexus-panel" });
+
+	const clockEl = panel.createDiv({ cls: "nexus-clock" });
 
 	const timeEl = clockEl.createDiv({ cls: "nexus-clock-time" });
 	const dateEl = showDate ? clockEl.createDiv({ cls: "nexus-clock-date" }) : null;

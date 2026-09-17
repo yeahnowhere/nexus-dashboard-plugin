@@ -274,7 +274,6 @@ describe("mergeSettings", () => {
 		expect(result.activityTimelineShowRelative).toBe(false);
 		expect(result.activityTimelineGroup).toBe("day");
 		expect(result.activityTimelineShowDate).toBe(true);
-		expect(result.activityTimelineShowMore).toBe(true);
 	});
 
 	it("clones the activity log when merging", () => {

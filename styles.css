@@ -509,7 +509,8 @@
   .nexus-card,
   .nexus-card-icon,
   .nexus-card-mini,
-  .nexus-card-mini-icon {
+  .nexus-card-mini-icon,
+  .nexus-panel {
     transition: none !important;
   }
   .nexus-card:hover,
@@ -587,6 +588,43 @@
 .nexus-card-mini:focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 3px;
+}
+
+/* ============================================================
+   Unified Component Panel — shared card chrome for widgets
+   Mirrors the MOC card recipe so every widget reads as a card.
+   ============================================================ */
+
+.nexus-panel {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.nexus-panel:hover {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 4px 16px var(--background-modifier-box-shadow, rgba(0, 0, 0, 0.06));
+}
+
+/* Transfer root spacing from widget containers into the panel */
+.nexus-panel .nexus-clock {
+  padding: 2px 0;
+}
+
+.nexus-panel .nexus-heatmap,
+.nexus-panel .nexus-timeline,
+.nexus-panel .nexus-vault-activity,
+.nexus-panel .nexus-filetypes,
+.nexus-panel .nexus-links-pills {
+  margin-top: 0;
+}
+
+@media (max-width: 600px) {
+  .nexus-panel {
+    padding: 12px 14px;
+  }
 }
 
 /* ============================================================
@@ -1882,25 +1920,6 @@ select.dropdown option:disabled {
   padding: 0.5rem 3px;
 }
 
-.nexus-timeline-more {
-  display: block;
-  margin: 0.5rem auto 0;
-  font-family: "JetBrains Mono NL", "Fira Code", "Cascadia Code", monospace;
-  font-size: 0.68rem;
-  background: transparent;
-  border: 1px dashed var(--background-modifier-border);
-  border-radius: 6px;
-  color: var(--text-muted);
-  padding: 3px 12px;
-  cursor: pointer;
-  transition: all 0.1s ease;
-}
-
-.nexus-timeline-more:hover {
-  border-color: var(--interactive-accent);
-  color: var(--text-normal);
-}
-
 /* ============================================================
    Nexus Vault Activity — Compact file list
    ============================================================ */
@@ -1988,17 +2007,16 @@ select.dropdown option:disabled {
    ============================================================ */
 
 .nexus-filetypes {
-  /* Fixed vivid palette — visible on both light and dark backgrounds.
-     Deliberately avoids black/white/gray so no extension ever looks
-     invisible or blends into the card background. */
-  --nexus-ft-0: #4f9dff;
-  --nexus-ft-1: #b07cff;
-  --nexus-ft-2: #37c870;
-  --nexus-ft-3: #ff9a3d;
-  --nexus-ft-4: #ff5f56;
-  --nexus-ft-5: #00c8b3;
-  --nexus-ft-6: #e0a800;
-  --nexus-ft-7: #ff6fa5;
+  /* Theme-adaptive palette — a ramp of the theme accent so the
+     chart follows any theme/accent instead of hardcoded colors. */
+  --nexus-ft-0: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+  --nexus-ft-1: color-mix(in srgb, var(--interactive-accent) 30%, transparent);
+  --nexus-ft-2: color-mix(in srgb, var(--interactive-accent) 42%, transparent);
+  --nexus-ft-3: color-mix(in srgb, var(--interactive-accent) 54%, transparent);
+  --nexus-ft-4: color-mix(in srgb, var(--interactive-accent) 66%, transparent);
+  --nexus-ft-5: color-mix(in srgb, var(--interactive-accent) 78%, transparent);
+  --nexus-ft-6: color-mix(in srgb, var(--interactive-accent) 90%, transparent);
+  --nexus-ft-7: var(--interactive-accent);
   margin-top: 0.5rem;
 }
 
