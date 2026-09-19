@@ -78,7 +78,7 @@ A navigation link inside a section.
 
 Card entries start with `- type:` (big or mini). Each section must contain only one card type — the section picks a single grid (mini-grid or big-grid) based on the first card, mixing types forces all cards into the wrong layout.
 
-Properties: `type` (big/mini), `label`, `desc`, `path`, `icon`, `color`, `columns` (1–4 on parent section)
+Properties: `type` (big/mini), `label`, `desc`, `path`, `icon`, `columns` (1–4 on parent section)
 
 Big cards:
 
@@ -92,7 +92,6 @@ section:
       desc: Daily reflections
       path: MOC/Journal MOC.md
       icon: Journal
-      color: #8A5CF6
 ```
 ````
 
@@ -162,26 +161,12 @@ graph:
 ```
 ````
 
-### Search bar
-A search input that filters vault notes.
-
-Properties: `show` (true/false), `default` (vault/cards), `placeholder`
-
-````
-```nexus-dashboard
-search:
-  show: true
-  default: vault
-  placeholder: Search your vault...
-```
-````
-
 ### Links
 A grid of clickable external or internal links.
 
 Properties: `title`, `columns` (1–4)
 
-Link items start with `- url:`. Each item can have `label`, `icon`, and `desc`.
+Link items start with `- url:`. Each item can have `label` and `desc`.
 
 ````
 ```nexus-dashboard
@@ -191,13 +176,10 @@ links:
   items:
     - url: https://obsidian.md
       label: Obsidian
-      icon: Link
     - url: https://github.com
       label: GitHub
-      icon: GitHub
     - url: MOC/Journal MOC.md
       label: Journal
-      icon: Journal
 ```
 ````
 
@@ -217,14 +199,13 @@ heatmap:
 ### Activity Timeline
 A chronological log of vault activity — created, modified, deleted, renamed/moved, task, and property events — with day or file grouping, relative times, and date chips. `MODIFIED` events update live as you edit; external renames are recovered via delete+create pairing and startup mtime reconciliation, so they appear as `renamed` instead of a spurious delete.
 
-Properties: `show` (true/false), `label`, `exclude` (comma-separated folders), `include` (comma-separated folders), `excludeExt` (comma-separated extensions), `types` (comma-separated actions, e.g. `created,deleted`), `onlyMarkdown` (true/false), `group` (day/file), `relative` (true/false), `showDate` (true/false), `showChips` (true/false)
+Properties: `show` (true/false), `label`, `exclude` (comma-separated folders), `include` (comma-separated folders), `excludeExt` (comma-separated extensions), `types` (comma-separated actions, e.g. `created,deleted`), `onlyMarkdown` (true/false), `group` (day/file), `relative` (true/false), `showDate` (true/false),
 
 ````
 ```nexus-dashboard
 timeline:
   show: true
   group: day
-  showChips: true
   relative: true
   exclude: Templates,Attachments
 ```
@@ -381,6 +362,7 @@ Open **Settings > Community Plugins > Nexus Dashboard** to configure:
 - **General** — open on startup, export/import settings JSON, reset to defaults
 - **Header** — show header toggle, ASCII text, font picker, color, desktop size, mobile size, alignment, live preview
 - **Dashboard** — the layout builder: row layouts, column layouts, and saved row proportions. Each card can be collapsed, dragged to reorder, or deleted
+- **Presets** — preloaded layout templates that replace the current dashboard layout while keeping your MOC cards, stats, vault lists, and quick links
 - **Components** — the content blocks that fill your layout slots, plus the global divider style
 
 Every card in the **Dashboard** and **Components** tabs collapses/expands by clicking its header, remembers its state between sessions, and supports **Collapse all / Expand all** shortcuts.
@@ -391,7 +373,7 @@ The dashboard is assembled from **row** and **column** layouts configured in **S
 
 - A **row layout** places content side-by-side. Set the number of columns (1–4), the proportion (e.g. `50/50`, `33/67`), and vertical alignment.
 - A **column layout** stacks content vertically inside a row. Set the spacing and alignment.
-- Each column of a row, or each slot of a column, gets a content slot: **Empty**, **Stats**, **Search**, **Heading**, **MOC Cards**, **Quick Links**, **Vault Activity**, **Divider**, **Heatmap**, **Activity Timeline**, **Clock**, **File Types**, or **Task Summary**.
+- Each column of a row, or each slot of a column, gets a content slot: **Empty**, **Stats**, **Heading**, **MOC Cards**, **Quick Links**, **Vault Activity**, **Divider**, **Heatmap**, **Activity Timeline**, **Clock**, **File Types**, or **Task Summary**.
 - Saved row proportions let you reuse column-width ratios across rows.
 
 ## Component Settings
@@ -400,11 +382,10 @@ The content blocks are configured in **Settings → Components**. Each component
 
 - **MOC Cards** — Map-of-Content cards with drag-and-drop reorder. Each card has a note path, title, description, icon picker, and color picker.
 - **Stats** — header counters showing file/folder counts from selected folders. Each counter picks a folder, a metric (`files`, `notes`, `size`, `tags`), a scope (`all`, `today`, `week`, `month`, `year`), and recursive subfolder traversal. A New Note button with configurable label, target folder, and optional template is available here too.
-- **Search** — vault-wide search bar; choose the default search mode (vault/cards).
 - **Vault Activity** — terminal-style lists of files. Create named presets with their own `path`, `tags`, `count`, and `label`; a preset with empty path and tags acts as a whole-vault list.
-- **Quick Links** — a grid of internal/external links with label, URL, and icon, drag-and-drop reorderable.
+- **Quick Links** — a grid of internal/external links with label and URL, drag-and-drop reorderable.
 - **Heatmap** — a GitHub-style contribution calendar of your vault activity (weeks, label).
-- **Activity Timeline** — a chronological log of vault activity (new/modified/deleted files and folders) with count, day grouping, relative times, and date chips. `MODIFIED` events update live as you edit. External renames are detected via delete+create pairing and startup mtime reconciliation, so they appear as `renamed` instead of a spurious delete. Toggles for activity tracking, task tracking, and markdown-only filtering live here.
+- **Activity Timeline** — a chronological log of vault activity (new/modified/deleted files and folders) with day grouping, relative times, and date chips. `MODIFIED` events update live as you edit. External renames are detected via delete+create pairing and startup mtime reconciliation, so they appear as `renamed` instead of a spurious delete. Toggles for activity tracking, task tracking, and markdown-only filtering live here.
 - **Clock** — a digital clock; set the timezone, show date/seconds, and pick a 12h/24h format.
 - **File Types** — a horizontal bar chart of file types in your vault (max types, label).
 - **Task Summary** — open/done tasks with a progress bar and a task list; filter by path or comma-separated tags, and set the max tasks shown.
@@ -417,7 +398,7 @@ npm install
 npm run dev          # watch mode
 npm run typecheck    # type-check (tsc --noEmit)
 npm run lint         # ESLint
-npm run test         # Vitest (125 tests)
+npm run test         # Vitest (312 tests)
 npm run build        # typecheck + production build
 ```
 
