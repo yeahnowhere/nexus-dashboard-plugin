@@ -31,9 +31,15 @@ interface MenuItemSpec {
 	onClick?: () => void;
 }
 
-function openContextMenu(cardEl: HTMLElement): Menu {
-	const showSpy = vi.spyOn(Menu.prototype, "showAtMouseEvent");
-	cardEl.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+function openContextMenu(cardEl: HTMLElement, viaKeyboard = false): Menu {
+	const showSpy = vi.spyOn(Menu.prototype, "showAtPosition");
+	if (viaKeyboard) {
+		cardEl.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }),
+		);
+	} else {
+		cardEl.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+	}
 	expect(showSpy).toHaveBeenCalledTimes(1);
 	const menu = showSpy.mock.instances[0] as unknown as Menu;
 	showSpy.mockRestore();
@@ -80,6 +86,68 @@ describe("createCard", () => {
 		expect(Notice.instances[Notice.instances.length - 1]?.message).toBe(
 			"File not found: MOC/Ghost.md",
 		);
+	});
+
+	it("throws no error when the card path does not exist", () => {
+		expect(() => renderCard(makeCard({ path: "MOC/Ghost.md" }))).not.toThrow();
+	});
+
+	it("marks the card as a dead link when the target file is missing", () => {
+		const { cardEl } = renderCard(makeCard({ path: "MOC/Ghost.md" }));
+		expect(cardEl.classList.contains("nexus-card-dead")).toBe(true);
+	});
+
+	it("does not mark the card as dead when the target file exists", () => {
+		const { cardEl } = renderCard(makeCard(), { files: ["MOC/Journal MOC.md"] });
+		expect(cardEl.classList.contains("nexus-card-dead")).toBe(false);
+	});
+
+	it("is keyboard-focusable with a link role and aria-label", () => {
+		const { cardEl } = renderCard(makeCard());
+		expect(cardEl.tabIndex).toBe(0);
+		expect(cardEl.getAttribute("role")).toBe("link");
+		expect(cardEl.getAttribute("aria-label")).toBe("Open Journal");
+	});
+
+	it("hides the icon from screen readers", () => {
+		const { cardEl } = renderCard(makeCard());
+		expect(cardEl.querySelector(".nexus-card-icon")?.getAttribute("aria-hidden")).toBe("true");
+	});
+
+	it("opens the file when Enter is pressed", () => {
+		const { ctx, cardEl } = renderCard(makeCard(), { files: ["MOC/Journal MOC.md"] });
+		cardEl.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+		);
+		expect(ctx.openLinkText).toHaveBeenCalledWith("MOC/Journal MOC.md", "", false);
+	});
+
+	it("opens the file when Space is pressed", () => {
+		const { ctx, cardEl } = renderCard(makeCard(), { files: ["MOC/Journal MOC.md"] });
+		cardEl.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+		expect(ctx.openLinkText).toHaveBeenCalledWith("MOC/Journal MOC.md", "", false);
+	});
+
+	it("builds a context menu from the Menu key", () => {
+		const { cardEl } = renderCard(makeCard());
+		const menu = openContextMenu(cardEl, true);
+		const titles = (menu.items as MenuItemSpec[]).map((i) => i.title);
+		expect(titles).toContain("Open");
+		expect(titles).toContain("Copy path");
+	});
+
+	it("builds a context menu from Shift+F10", () => {
+		const { cardEl } = renderCard(makeCard());
+		const showSpy = vi.spyOn(Menu.prototype, "showAtPosition");
+		cardEl.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true }),
+		);
+		expect(showSpy).toHaveBeenCalledTimes(1);
+		const menu = showSpy.mock.instances[0] as unknown as Menu;
+		showSpy.mockRestore();
+		const titles = (menu.items as MenuItemSpec[]).map((i) => i.title);
+		expect(titles).toContain("Open");
+		expect(titles).toContain("Copy path");
 	});
 
 	it("builds a context menu with Open and Copy path", () => {

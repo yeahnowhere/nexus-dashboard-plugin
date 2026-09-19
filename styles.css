@@ -450,6 +450,24 @@
   text-overflow: ellipsis;
 }
 
+/* ── Dead-link cards ────────────────────────────────────────
+   Rendered when the card's target vault path no longer exists.
+   Kept interactive (click still Notices "File not found"). */
+.nexus-card.nexus-card-dead,
+.nexus-card-mini.nexus-card-dead {
+  border-color: var(--text-error, #e93147);
+  border-style: dashed;
+  opacity: 0.72;
+}
+
+.nexus-card.nexus-card-dead .nexus-card-title,
+.nexus-card-mini.nexus-card-dead .nexus-card-title,
+.nexus-card.nexus-card-dead .nexus-card-mini-title,
+.nexus-card-mini.nexus-card-dead .nexus-card-mini-title {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-error, #e93147);
+}
+
 /* ── MOC Panel (tray) ─────────────────────────────────────────
    Wraps the whole MOC grid in the unified panel recipe; the cards
    inside keep their own card chrome (background + border) so the
@@ -636,6 +654,8 @@
 .nexus-card-mini:focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 3px;
+  box-shadow: 0 0 0 4px var(--interactive-accent-hover);
+  background: var(--background-modifier-hover);
 }
 
 /* ============================================================
