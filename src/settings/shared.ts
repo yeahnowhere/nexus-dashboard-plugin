@@ -41,6 +41,11 @@ interface DividerControlSettings {
 	onLabel: (value: string) => Promise<void>;
 }
 
+/** Namespaced key under which a card's collapsed state is persisted. */
+export function collapseKey(scope: string, id: string | number): string {
+	return `${scope}:${id}`;
+}
+
 let vaultFoldersCache: string[] | null = null;
 let vaultFoldersCacheAt = 0;
 

@@ -28,6 +28,7 @@ type HTMLElementWithObsidianExtras = HTMLElement & {
 	addClass(...classes: string[]): void;
 	removeClass(...classes: string[]): void;
 	toggleClass(classes: string, value: boolean): void;
+	setAttr(name: string, value: string | number | boolean | null): void;
 };
 
 declare global {
@@ -46,6 +47,7 @@ declare global {
 		addClass(...classes: string[]): void;
 		removeClass(...classes: string[]): void;
 		toggleClass(classes: string, value: boolean): void;
+		setAttr(name: string, value: string | number | boolean | null): void;
 	}
 }
 
@@ -114,6 +116,18 @@ export function applyObsidianDomPolyfill(): void {
 
 	proto.toggleClass = function (this: HTMLElement, classes: string, value: boolean): void {
 		this.classList.toggle(classes, value);
+	};
+
+	proto.setAttr = function (
+		this: HTMLElement,
+		name: string,
+		value: string | number | boolean | null,
+	): void {
+		if (value === null || value === undefined) {
+			this.removeAttribute(name);
+		} else {
+			this.setAttribute(name, String(value));
+		}
 	};
 }
 
