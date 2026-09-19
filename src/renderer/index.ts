@@ -263,7 +263,8 @@ export class NexusRenderer extends MarkdownRenderChild {
 			source.includes("heatmap:") ||
 			source.includes("timeline:") ||
 			source.includes("clock:") ||
-			source.includes("filetypes:");
+			source.includes("filetypes:") ||
+			source.includes("tasks:");
 		if (hasBlocks) {
 			merged.blocks = override.blocks;
 		} else {

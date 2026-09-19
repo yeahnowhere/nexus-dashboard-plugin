@@ -29,6 +29,7 @@ export default class NexusDashboardPlugin extends Plugin {
 	private taskCheckTimer: ReturnType<typeof setTimeout> | null = null;
 	private propertyCheckTimer: ReturnType<typeof setTimeout> | null = null;
 	private graphRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+	private dashboardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 	private taskCheckQueue: Array<{ file: TFile; editor: Editor }> = [];
 	private propertyCheckQueue: Set<string> = new Set();
 	private taskSnapshot = new Map<string, Map<number, string>>();
@@ -158,6 +159,14 @@ export default class NexusDashboardPlugin extends Plugin {
 		this.registerEvent(this.app.vault.on("rename", () => this.scheduleGraphRefresh()));
 		this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleGraphRefresh()));
 
+		// Re-render open dashboards once the metadata cache settles. On a cold
+		// start, a `tasks:` block renders before Obsidian finishes indexing and
+		// `getFileCache` returns no `listItems` → the block shows "No tasks
+		// found" until a re-render happens. Listening on "changed" (not
+		// "resolved") is loop-free: our own render never emits "changed",
+		// while graph injection re-emits "resolved".
+		this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleDashboardRefresh()));
+
 		// ── Open on startup ─────────────────────────────────
 		if (this.settings.openOnStartup) {
 			this.app.workspace.onLayoutReady(() => {
@@ -231,6 +240,15 @@ export default class NexusDashboardPlugin extends Plugin {
 			this.graphRefreshTimer = null;
 			void injectAllGraphLinks(this.app, this.settings);
 		}, 600);
+	}
+
+	/** Debounced re-render of open dashboards after metadata settles. */
+	private scheduleDashboardRefresh(): void {
+		if (this.dashboardRefreshTimer) return;
+		this.dashboardRefreshTimer = setTimeout(() => {
+			this.dashboardRefreshTimer = null;
+			this.rerenderDashboards();
+		}, 800);
 	}
 
 	// ── Activity log ───────────────────────────────────────
