@@ -4,6 +4,7 @@ import { renderTaskSummary } from "../renderer/task-summary";
 import { Notice } from "./helpers/obsidian-mock";
 import { makeContext } from "./helpers/render-context";
 import type { FakeListItem } from "./helpers/render-context";
+import type { MetadataCache } from "obsidian";
 import type { TaskSummaryConfig } from "../types";
 
 function host(): HTMLElement {
@@ -59,6 +60,22 @@ describe("renderTaskSummary", () => {
 		const empty = el.querySelector(".nexus-tasks-empty");
 		expect(empty).not.toBeNull();
 		expect(empty?.textContent).toBe("No tasks found");
+		expect(el.querySelector(".nexus-tasks-stats")).toBeNull();
+	});
+
+	it("shows a loading placeholder while the metadata cache is unindexed", async () => {
+		const ctx = makeContext({
+			files: [{ path: "A.md", content: "- [ ] Cold start" }],
+			app: {
+				metadataCache: { getFileCache: () => null } as unknown as MetadataCache,
+			},
+		});
+		const el = host();
+		await renderTaskSummary(ctx, el, makeConfig());
+
+		const empty = el.querySelector(".nexus-tasks-empty");
+		expect(empty).not.toBeNull();
+		expect(empty?.textContent).toBe("Loading tasks\u2026");
 		expect(el.querySelector(".nexus-tasks-stats")).toBeNull();
 	});
 

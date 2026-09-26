@@ -33,11 +33,18 @@ export async function renderTaskSummary(
 
 	let total = 0;
 	let done = 0;
+	let unindexed = 0;
 	const openTasks: { text: string; file: TFile; line: number; due: string | null }[] = [];
 
 	for (const file of filtered) {
 		const cache = ctx.app.metadataCache.getFileCache(file);
-		const items = cache?.listItems;
+		if (cache === null) {
+			// Obsidian hasn't indexed this file yet (cold start). Treat it as
+			// pending so the empty state says "loading" instead of "no tasks".
+			unindexed++;
+			continue;
+		}
+		const items = cache.listItems;
 		if (!items) continue;
 
 		const raw = await ctx.app.vault.cachedRead(file);
@@ -95,9 +102,13 @@ export async function renderTaskSummary(
 	// Empty state
 	if (total === 0) {
 		const emptyEl = taskEl.createDiv({ cls: "nexus-tasks-empty" });
-		emptyEl.createEl("span", { text: "No tasks found", cls: "nexus-tasks-empty-text" });
-		if (filterPath) {
-			emptyEl.createEl("span", { text: `in ${filterPath}`, cls: "nexus-tasks-empty-path" });
+		if (unindexed > 0) {
+			emptyEl.createEl("span", { text: "Loading tasks…", cls: "nexus-tasks-empty-text" });
+		} else {
+			emptyEl.createEl("span", { text: "No tasks found", cls: "nexus-tasks-empty-text" });
+			if (filterPath) {
+				emptyEl.createEl("span", { text: `in ${filterPath}`, cls: "nexus-tasks-empty-path" });
+			}
 		}
 		return;
 	}
