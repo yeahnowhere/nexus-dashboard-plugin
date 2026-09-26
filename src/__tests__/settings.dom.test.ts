@@ -84,11 +84,11 @@ beforeEach(() => {
 });
 
 describe("settings tab chrome", () => {
-	it("renders the title, five tabs, and the General tab by default", () => {
+	it("renders the title, six tabs, and the General tab by default", () => {
 		const { tab } = makeSettingsTab();
 		tab.display();
 		expect(tab.containerEl.querySelector(".nexus-settings-logo")).not.toBeNull();
-		expect(tab.containerEl.querySelectorAll(".nexus-settings-tab")).toHaveLength(5);
+		expect(tab.containerEl.querySelectorAll(".nexus-settings-tab")).toHaveLength(6);
 		expect(tab.containerEl.querySelector(".nexus-settings-tab.active")?.textContent).toContain(
 			"General",
 		);
@@ -121,6 +121,11 @@ describe("settings tab chrome", () => {
 		clickTab(tab, "Components");
 		content = activeContent(tab);
 		expect(content.querySelectorAll(".nexus-component-card").length).toBeGreaterThan(0);
+
+		clickTab(tab, "Navigation");
+		content = activeContent(tab);
+		expect(content.textContent).toContain("Keyboard navigation");
+		expect(content.textContent).toContain("Focus dashboard on open");
 	});
 });
 

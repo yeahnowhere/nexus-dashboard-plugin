@@ -649,15 +649,6 @@
   }
 }
 
-/* ── Focus / Accessibility ─────────────────────────────────── */
-.nexus-card:focus-visible,
-.nexus-card-mini:focus-visible {
-  outline: 2px solid var(--interactive-accent);
-  outline-offset: 3px;
-  box-shadow: 0 0 0 4px var(--interactive-accent-hover);
-  background: var(--background-modifier-hover);
-}
-
 /* ============================================================
    Unified Component Panel — shared card chrome for widgets
    Mirrors the MOC card recipe so every widget reads as a card.
@@ -2461,5 +2452,132 @@ select.dropdown option:disabled {
 
   .nexus-tasks-item-text {
     font-size: 0.75rem;
+  }
+}
+
+/* ============================================================
+   Keyboard Navigation — arrow/WASD pointer control
+   Selection reuses the exact mouse-hover styles via a shared
+   `.nexus-nav-selected` class (no new visuals).
+   ============================================================ */
+
+.nexus-dashboard-root:focus,
+.nexus-dashboard-root:focus-visible {
+  outline: none;
+}
+
+.nexus-stat-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 2px 8px var(--background-modifier-box-shadow, rgba(0, 0, 0, 0.06));
+}
+
+.nexus-stat-new-note:hover,
+.nexus-stat-new-note.nexus-nav-selected {
+  transform: translateY(-1px);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 2px 8px var(--background-modifier-box-shadow, rgba(0, 0, 0, 0.06));
+}
+
+.nexus-card:hover,
+.nexus-card.nexus-nav-selected {
+  transform: translateY(-2px);
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+  box-shadow: 0 4px 16px var(--background-modifier-box-shadow, rgba(0, 0, 0, 0.06));
+}
+
+.nexus-card:hover::after,
+.nexus-card.nexus-nav-selected::after {
+  left: 100%;
+}
+
+.nexus-card:hover .nexus-card-icon,
+.nexus-card.nexus-nav-selected .nexus-card-icon {
+  animation: none;
+  transform: scale(1.08);
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.nexus-card:hover .nexus-card-title,
+.nexus-card.nexus-nav-selected .nexus-card-title {
+  color: var(--interactive-accent);
+}
+
+.nexus-card-mini:hover,
+.nexus-card-mini.nexus-nav-selected {
+  transform: translateY(-2px);
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+  box-shadow: 0 4px 16px var(--background-modifier-box-shadow, rgba(0, 0, 0, 0.06));
+}
+
+.nexus-card-mini:hover::after,
+.nexus-card-mini.nexus-nav-selected::after {
+  left: 100%;
+}
+
+.nexus-card-mini:hover .nexus-card-mini-icon,
+.nexus-card-mini.nexus-nav-selected .nexus-card-mini-icon {
+  animation: none;
+  transform: scale(1.08);
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.nexus-card-mini:hover .nexus-card-mini-title,
+.nexus-card-mini.nexus-nav-selected .nexus-card-mini-title {
+  color: var(--interactive-accent);
+}
+
+.nexus-moc-panel .nexus-card:hover,
+.nexus-moc-panel .nexus-card-mini:hover,
+.nexus-moc-panel .nexus-card.nexus-nav-selected,
+.nexus-moc-panel .nexus-card-mini.nexus-nav-selected {
+  transform: none;
+  box-shadow: 0 2px 10px var(--background-modifier-box-shadow, rgba(0, 0, 0, 0.06));
+}
+
+.nexus-panel:hover,
+.nexus-panel.nexus-nav-selected {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 4px 16px var(--background-modifier-box-shadow, rgba(0, 0, 0, 0.06));
+}
+
+.nexus-link-pill:hover,
+.nexus-link-pill.nexus-nav-selected {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.nexus-timeline-row:hover,
+.nexus-timeline-row.nexus-nav-selected {
+  background: var(--background-modifier-hover);
+}
+
+.nexus-vault-activity-row:hover,
+.nexus-vault-activity-row.nexus-nav-selected {
+  background: var(--background-modifier-hover);
+}
+
+.nexus-tasks-item:hover,
+.nexus-tasks-item.nexus-nav-selected {
+  background: var(--background-modifier-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nexus-card:hover,
+  .nexus-card-mini:hover,
+  .nexus-card.nexus-nav-selected,
+  .nexus-card-mini.nexus-nav-selected {
+    transform: none !important;
+  }
+
+  .nexus-card:hover .nexus-card-icon,
+  .nexus-card-mini:hover .nexus-card-mini-icon,
+  .nexus-card.nexus-nav-selected .nexus-card-icon,
+  .nexus-card-mini.nexus-nav-selected .nexus-card-mini-icon {
+    transform: none !important;
   }
 }

@@ -719,4 +719,8 @@ export interface NexusSettings {
 	taskSummaryShowFade: boolean;
 	/** Maximum height of the task summary list before scrolling (px). */
 	taskSummaryMaxHeight: number;
+	/** Whether arrow/WASD keyboard navigation is enabled inside dashboards. */
+	keyboardNav: boolean;
+	/** Whether the dashboard grabs focus on open so the arrows work immediately. */
+	keyboardNavFocusOnOpen: boolean;
 }

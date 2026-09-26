@@ -9,6 +9,7 @@ import { renderHeaderTab } from "./tabs/header";
 import { renderLayoutTab } from "./tabs/layout";
 import { renderPresetsTab } from "./tabs/presets";
 import { renderComponentsTab } from "./tabs/components";
+import { renderNavigationTab } from "./tabs/navigation";
 
 export { ICON_NAMES, CONTENT_SLOT_OPTIONS, clearVaultFoldersCache } from "./shared";
 export {
@@ -154,6 +155,9 @@ export class NexusSettingTab extends PluginSettingTab {
 					break;
 				case "components":
 					renderComponentsTab(this, content);
+					break;
+				case "navigation":
+					renderNavigationTab(this, content);
 					break;
 			}
 		} catch (err) {

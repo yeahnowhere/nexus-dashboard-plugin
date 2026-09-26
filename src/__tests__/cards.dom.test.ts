@@ -102,9 +102,9 @@ describe("createCard", () => {
 		expect(cardEl.classList.contains("nexus-card-dead")).toBe(false);
 	});
 
-	it("is keyboard-focusable with a link role and aria-label", () => {
+	it("has a link role and aria-label without a tab stop", () => {
 		const { cardEl } = renderCard(makeCard());
-		expect(cardEl.tabIndex).toBe(0);
+		expect(cardEl.tabIndex).toBe(-1);
 		expect(cardEl.getAttribute("role")).toBe("link");
 		expect(cardEl.getAttribute("aria-label")).toBe("Open Journal");
 	});

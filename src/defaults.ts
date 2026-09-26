@@ -251,6 +251,8 @@ export const DEFAULT_SETTINGS: NexusSettings = {
 	activityTimelineShowDate: true,
 	taskSummaryShowFade: true,
 	taskSummaryMaxHeight: 120,
+	keyboardNav: true,
+	keyboardNavFocusOnOpen: true,
 	showTaskSummary: true,
 	showTaskSummaryDivider: true,
 	taskSummaryShowProgress: false,

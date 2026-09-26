@@ -32,6 +32,7 @@ import { renderFileTypeChart } from "./filetypes";
 import { renderTaskSummary } from "./task-summary";
 import { renderStatsBar } from "./stats";
 import { injectGraphLinks } from "./graph";
+import { DashboardKeyboardNav } from "./keyboard-nav";
 import type { RendererContext } from "./context";
 
 export class NexusRenderer extends MarkdownRenderChild {
@@ -42,6 +43,8 @@ export class NexusRenderer extends MarkdownRenderChild {
 	private renderQueued = false;
 	private clockIntervals: Set<ReturnType<typeof setInterval>> = new Set();
 	private timelineRefreshInterval: ReturnType<typeof setInterval> | null = null;
+	private keyboardNav: DashboardKeyboardNav;
+	private firstRender = true;
 
 	constructor(
 		containerEl: HTMLElement,
@@ -53,6 +56,13 @@ export class NexusRenderer extends MarkdownRenderChild {
 		this.plugin = plugin;
 		this.source = source;
 		this.sourcePath = sourcePath;
+		containerEl.classList.add("nexus-dashboard-root");
+		containerEl.setAttribute("tabindex", "-1");
+		this.keyboardNav = new DashboardKeyboardNav(
+			containerEl,
+			() => this.plugin.settings.keyboardNav,
+			() => this.plugin.settings.keyboardNavFocusOnOpen,
+		);
 	}
 
 	/** Dependency bundle handed to the standalone component renderers. */
@@ -78,6 +88,7 @@ export class NexusRenderer extends MarkdownRenderChild {
 
 	onunload(): void {
 		this.plugin.activeRenderers.delete(this);
+		this.keyboardNav.dispose();
 		this.clearClockIntervals();
 		if (this.timelineRefreshInterval) {
 			clearInterval(this.timelineRefreshInterval);
@@ -169,6 +180,10 @@ export class NexusRenderer extends MarkdownRenderChild {
 		if (config.graph.enabled) {
 			injectGraphLinks(this.ctx, config);
 		}
+
+		// ── Keyboard nav (rebuilt against the fresh DOM) ───
+		this.keyboardNav.reset(this.firstRender);
+		this.firstRender = false;
 	}
 
 	// ── Unified block dispatch ───────────────────────────────

@@ -31,6 +31,7 @@ const SETTING_TABS: SettingTab[] = [
 	{ id: "layout", name: "Dashboard", icon: "layout-grid" },
 	{ id: "presets", name: "Presets", icon: "wand" },
 	{ id: "components", name: "Components", icon: "component" },
+	{ id: "navigation", name: "Navigation", icon: "keyboard" },
 ];
 
 interface DividerControlSettings {

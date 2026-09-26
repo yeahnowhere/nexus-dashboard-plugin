@@ -31,8 +31,7 @@ export function createCard(ctx: RendererContext, card: CardConfig): HTMLElement 
 		cardEl.classList.add("nexus-card-dead");
 	}
 
-	// Keyboard focus + screen-reader semantics
-	cardEl.tabIndex = 0;
+	// Screen-reader semantics (no tab stop)
 	cardEl.setAttribute("role", "link");
 	cardEl.setAttribute("aria-label", `Open ${card.label}`);
 
