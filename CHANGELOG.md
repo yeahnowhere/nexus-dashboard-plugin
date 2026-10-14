@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Timeline rows scroll sideways instead of clipping** - long paths and change details were cut off with an ellipsis at the panel edge; the list is now a single max-content column, so every row keeps its full width and the panel scrolls horizontally (shift + mouse wheel, or a trackpad swipe) like a spreadsheet. Day separators span the full scroll width, and short rows still fill the panel as before
+- **Timeline row hover tooltip** - hovering a row animates in a tooltip with the action, the full timestamp, the untruncated path (`old -> new` for renames and moves) and the change detail on separate lines, so nothing stays hidden when a path is long. It replaces the previous tooltip that only showed the timestamp
+
+### Fixed
+
+- **Heatmap month labels sat one column too far right** - month anchors were measured from a noon cursor against a midnight range start, and rounding pulled the fractional day up a full day, so any month whose 1st landed on the week column's last day was anchored into the *next* week (e.g. Nov and Aug in a 52-week view); anchors now use the exact calendar-day distance. Month labels are also collected per year-month instead of month number, so a range that crosses a year boundary or repeats a month name (over 52 weeks) keeps every label in order instead of dropping/overlapping them
+
 ## v1.4.0 — 2026-09-17
 
 ### Fixed
