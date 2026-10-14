@@ -115,25 +115,30 @@ export function renderHeatmap(
 	// (GitHub-style) instead of centering over a group, so partial months at
 	// the range edges stay aligned with their cells. Months whose 1st falls
 	// before the displayed range are skipped (no label over the leading cut).
-	const monthLabelCol = new Map<number, number>();
+	// Collect one entry per month occurrence in chronological order — keying by
+	// year+month keeps a range that spans a year boundary (or repeats a month
+	// name) from colliding and corrupting the columns/spans.
 	const dayMs = 86_400_000;
+	const utcDay = (d: Date): number => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
 	const todayMonthKey = today.getFullYear() * 12 + today.getMonth();
+	const monthEntries: { month: number; col: number }[] = [];
 	let cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1, 12, 0, 0);
 	while (cursor.getFullYear() * 12 + cursor.getMonth() <= todayMonthKey) {
-		const offset = Math.round((cursor.getTime() - startDate.getTime()) / dayMs);
+		// Exact calendar-day distance (ignore time-of-day) so a month whose 1st
+		// is the last day of its week column isn't pushed one column too far.
+		const offset = Math.round((utcDay(cursor) - utcDay(startDate)) / dayMs);
 		if (offset >= 0) {
 			const col = Math.floor(offset / 7);
-			if (col >= 0 && col < weeks) monthLabelCol.set(cursor.getMonth(), col);
+			if (col >= 0 && col < weeks) monthEntries.push({ month: cursor.getMonth(), col });
 		}
 		cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12, 0, 0);
 	}
 
-	const months = Array.from(monthLabelCol.keys());
-	for (let i = 0; i < months.length; i++) {
-		const start = monthLabelCol.get(months[i]) ?? 0;
-		const end = i + 1 < months.length ? (monthLabelCol.get(months[i + 1]) ?? weeks) : weeks;
+	for (let i = 0; i < monthEntries.length; i++) {
+		const start = monthEntries[i].col;
+		const end = i + 1 < monthEntries.length ? monthEntries[i + 1].col : weeks;
 		const spacer = monthRow.createDiv({ cls: "nexus-heatmap-month-spacer" });
-		spacer.textContent = monthNames[months[i]];
+		spacer.textContent = monthNames[monthEntries[i].month];
 		spacer.style.gridColumn = `${start + 2} / span ${Math.max(1, end - start)}`;
 	}
 
