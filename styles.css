@@ -1816,12 +1816,19 @@ select.dropdown option:disabled {
    Nexus Timeline — Terminal-style activity log
    ============================================================ */
 
+/* A single max-content column keeps every row at its natural width, so long
+   paths are never clipped: the list scrolls sideways (shift + wheel, trackpad
+   swipe) instead of ellipsizing, and day separators span the full scroll
+   width. `minmax(100%, …)` keeps short rows filling the panel as before. */
 .nexus-timeline {
+  display: grid;
+  grid-template-columns: minmax(100%, max-content);
+  align-content: start;
   font-family: "JetBrains Mono NL", "Fira Code", "Cascadia Code", monospace;
   font-size: 0.72rem;
   line-height: 1.4;
   margin-top: 0.5rem;
-  overflow-y: auto;
+  overflow: auto;
   scrollbar-width: none;
 }
 
@@ -1958,6 +1965,16 @@ select.dropdown option:disabled {
   font-family: "JetBrains Mono NL", "Fira Code", "Cascadia Code", monospace;
   font-size: 0.72rem;
   padding: 0.5rem 3px;
+}
+
+/* Hover tooltip on a row: the untruncated path, the change detail and the
+   full timestamp, on their own lines instead of one very wide bubble. */
+.tooltip.nexus-timeline-tooltip {
+  white-space: pre-line;
+  max-width: 44ch;
+  font-family: "JetBrains Mono NL", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.7rem;
+  line-height: 1.45;
 }
 
 /* ============================================================

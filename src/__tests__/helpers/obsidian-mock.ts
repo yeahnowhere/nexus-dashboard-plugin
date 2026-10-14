@@ -442,6 +442,26 @@ export function setIcon(parent: HTMLElement, iconName: string): HTMLElement {
 	return icon;
 }
 
+export interface TooltipOptions {
+	placement?: "bottom" | "right" | "left" | "top";
+	classes?: string[];
+	gap?: number;
+	delay?: number;
+}
+
+export interface TooltipCall {
+	el: HTMLElement;
+	tooltip: string;
+	options?: TooltipOptions;
+}
+
+/** Every `setTooltip` call made during a test, in order. */
+export const tooltipCalls: TooltipCall[] = [];
+
+export function setTooltip(el: HTMLElement, tooltip: string, options?: TooltipOptions): void {
+	tooltipCalls.push({ el, tooltip, options });
+}
+
 let copiedText = "";
 
 export function copy(textToCopy: string): void {

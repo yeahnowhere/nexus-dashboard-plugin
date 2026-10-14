@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderTimeline, formatRelativeTime, timelineDayInfo } from "../renderer/timeline";
-import { Notice } from "./helpers/obsidian-mock";
+import { Notice, tooltipCalls } from "./helpers/obsidian-mock";
 import { makeContext } from "./helpers/render-context";
 import type { TimelineConfig } from "../types";
 
@@ -17,6 +17,7 @@ beforeEach(() => {
 	vi.useFakeTimers();
 	vi.setSystemTime(new Date(2026, 7, 6, 12, 0, 0));
 	Notice.instances = [];
+	tooltipCalls.length = 0;
 });
 
 afterEach(() => {
@@ -196,6 +197,58 @@ describe("renderTimeline", () => {
 		const list = el.querySelector<HTMLElement>(".nexus-timeline");
 		expect(list?.classList.contains("nexus-fade-mask")).toBe(true);
 		expect(list?.style.maxHeight).toBe("410px");
+	});
+
+	it("gives every row a hover tooltip with the full path and detail", () => {
+		const longPath = "Project/nexus-dashboard-plugin/Plans/Backlog and Notes.md";
+		const ctx = makeContext({
+			settings: {
+				activityLog: [
+					{ time: day(2026, 8, 6, 11), action: "task", path: longPath, detail: "ship the tooltip" },
+				],
+			},
+		});
+		const el = host();
+		renderTimeline(ctx, el, makeConfig({ showDate: false }));
+
+		const row = el.querySelector<HTMLElement>(".nexus-timeline-row");
+		const call = tooltipCalls[tooltipCalls.length - 1];
+		expect(call?.el).toBe(row);
+		expect(call?.options?.classes).toContain("nexus-timeline-tooltip");
+		const lines = call?.tooltip.split("\n") ?? [];
+		expect(lines[0]).toContain("TASK");
+		expect(lines[1]).toBe(longPath);
+		expect(lines[2]).toBe("ship the tooltip");
+	});
+
+	it("spells out old to new path in the renamed row tooltip", () => {
+		const ctx = makeContext({
+			settings: {
+				activityLog: [
+					{
+						time: day(2026, 8, 6, 11),
+						action: "renamed",
+						path: "Notes/B.md",
+						oldPath: "Notes/A.md",
+					},
+				],
+			},
+		});
+		const el = host();
+		renderTimeline(ctx, el, makeConfig({ showDate: false }));
+
+		expect(tooltipCalls[tooltipCalls.length - 1]?.tooltip).toContain("Notes/A.md → Notes/B.md");
+	});
+
+	it("omits the native title so the tooltip is the only hover popup", () => {
+		const ctx = makeContext({
+			files: [{ path: "a.md", mtime: day(2026, 8, 6, 11) }],
+		});
+		const el = host();
+		renderTimeline(ctx, el, makeConfig({ showDate: false }));
+
+		const row = el.querySelector<HTMLElement>(".nexus-timeline-row");
+		expect(row?.hasAttribute("title")).toBe(false);
 	});
 });
 

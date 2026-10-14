@@ -1,4 +1,4 @@
-import { Notice, TFile } from "obsidian";
+import { Notice, TFile, setTooltip } from "obsidian";
 import { buildTimelineEvents as buildTimelineEventsBase } from "../timeline";
 import { splitCsv, dateKey } from "../utils";
 import type { ActivityEvent, TimelineConfig } from "../types";
@@ -57,6 +57,20 @@ export function timelineDayInfo(time: number): { key: string; label: string } {
 
 /** Fixed bound on files backfilled from recent vault activity when the log is empty. */
 const TIMELINE_BACKFILL_CAP = 500;
+
+/** Actions whose event carries a previous path worth spelling out in the tooltip. */
+const RENAME_ACTIONS = new Set(["moved", "renamed", "folder-renamed"]);
+
+/** Full-length row description: action + timestamp, untruncated path, then the detail. */
+export function buildRowTooltip(event: ActivityEvent, label: string): string {
+	const path =
+		event.oldPath && RENAME_ACTIONS.has(event.action)
+			? `${event.oldPath} → ${event.path}`
+			: event.path;
+	const lines = [`${label} · ${new Date(event.time).toLocaleString()}`, path];
+	if (event.detail) lines.push(event.detail);
+	return lines.join("\n");
+}
 
 /** Render a timeline block showing the full filtered event list. */
 export function renderTimeline(
@@ -204,10 +218,7 @@ function renderTimelineRow(
 	actionEl.appendText(" " + meta.label);
 
 	const pathEl = row.createEl("span", { cls: "nexus-timeline-path" });
-	if (
-		event.oldPath &&
-		(event.action === "moved" || event.action === "renamed" || event.action === "folder-renamed")
-	) {
+	if (event.oldPath && RENAME_ACTIONS.has(event.action)) {
 		pathEl.createEl("span", { text: event.oldPath, cls: "nexus-timeline-path-old" });
 		pathEl.appendText(" → ");
 		pathEl.appendText(event.path);
@@ -218,7 +229,11 @@ function renderTimelineRow(
 		pathEl.createEl("span", { text: ` · ${event.detail}`, cls: "nexus-timeline-detail" });
 	}
 
-	row.title = new Date(event.time).toLocaleString();
+	setTooltip(row, buildRowTooltip(event, meta.label), {
+		placement: "bottom",
+		delay: 150,
+		classes: ["nexus-timeline-tooltip"],
+	});
 
 	if (total > 1) {
 		row.createEl("span", { text: `+${total - 1}`, cls: "nexus-timeline-badge" });
