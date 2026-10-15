@@ -130,7 +130,6 @@ function renderAsciiPreview(tab: NexusSettingTab, container: HTMLElement): void 
 	pre.style.color = tab.plugin.settings.asciiDefaultColor;
 	pre.style.setProperty("--nexus-ascii-size", String(tab.plugin.settings.asciiDefaultSize));
 	pre.style.textAlign = tab.plugin.settings.asciiDefaultAlign;
-	pre.style.overflowX = "auto";
 	pre.style.fontFamily = "monospace";
 	pre.style.lineHeight = "1";
 }

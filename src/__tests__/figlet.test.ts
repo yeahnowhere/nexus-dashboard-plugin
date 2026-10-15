@@ -57,3 +57,66 @@ describe("renderFiglet", () => {
 		expect(out.split("\n").length).toBeLessThanOrEqual(7);
 	});
 });
+
+const CANONICAL_A: Record<string, string[]> = {
+	"ANSI Shadow": [
+		" █████╗ ",
+		"██╔══██╗",
+		"███████║",
+		"██╔══██║",
+		"██║  ██║",
+		"╚═╝  ╚═╝",
+		"        ",
+	],
+	Slant: ["    ___ ", "   /   |", "  / /| |", " / ___ |", "/_/  |_|", "        "],
+	"Small Slant": ["   ___ ", "  / _ |", " / __ |", "/_/ |_|", "       "],
+	Standard: [
+		"     _    ",
+		"    / \\   ",
+		"   / _ \\  ",
+		"  / ___ \\ ",
+		" /_/   \\_\\",
+		"          ",
+	],
+	Graffiti: [
+		"   _____   ",
+		"  /  _  \\  ",
+		" /  /_\\  \\ ",
+		"/    |    \\",
+		"\\____|__  /",
+		"        \\/ ",
+	],
+};
+
+describe("font glyph integrity", () => {
+	it("renders the canonical A glyph for every font", () => {
+		for (const { name } of EXPECTED_FONTS) {
+			const font = getFontByName(name);
+			expect(font.chars["A"], name).toEqual(CANONICAL_A[name]);
+		}
+	});
+
+	it("renders canonical ANSI Shadow punctuation", () => {
+		const font = getFontByName("ANSI Shadow");
+		expect(font.chars["&"]).toEqual([
+			"   ██╗   ",
+			"   ██║   ",
+			"████████╗",
+			"██╔═██╔═╝",
+			"██████║  ",
+			"╚═════╝  ",
+			"         ",
+		]);
+		expect(font.chars["["]).toEqual(["███╗", "██╔╝", "██║ ", "██║ ", "███╗", "╚══╝", "    "]);
+		expect(font.chars['"']).toEqual(["", "", "", "", "", "", ""]);
+	});
+
+	it("keeps each glyph vertically aligned to the font height", () => {
+		for (const { name, height } of EXPECTED_FONTS) {
+			const font = getFontByName(name);
+			for (const [key, glyph] of Object.entries(font.chars)) {
+				expect(glyph.length, `${name} glyph ${key}`).toBe(height);
+			}
+		}
+	});
+});

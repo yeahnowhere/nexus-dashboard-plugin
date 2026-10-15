@@ -6,11 +6,24 @@
 
 - **Timeline rows scroll sideways instead of clipping** - long paths and change details were cut off with an ellipsis at the panel edge; the list is now a single max-content column, so every row keeps its full width and the panel scrolls horizontally (shift + mouse wheel, or a trackpad swipe) like a spreadsheet. Day separators span the full scroll width, and short rows still fill the panel as before
 - **Timeline row hover tooltip** - hovering a row animates in a tooltip with the action, the full timestamp, the untruncated path (`old -> new` for renames and moves) and the change detail on separate lines, so nothing stays hidden when a path is long. It replaces the previous tooltip that only showed the timestamp
+- **`npm run gen:fonts`** - a dev-only script (`scripts/gen-fonts.mjs`, fetches `.flf` from `patorjk/figlet.js`) that regenerates `src/fonts/*.ts` from canonical FIGlet data, so the hand-written fonts can be re-synced or a new font added from upstream source
 
 ### Fixed
 
+- **Four header fonts rendered as garbled ASCII art** - the hand-written `Slant`, `Small Slant`, `Standard` and `Graffiti` glyph tables had their whole line stream shifted by 5/5/2/5 rows, so every character was assembled from the wrong slices of the following glyphs (verified against the canonical FIGlet data). They are now regenerated verbatim from the upstream `patorjk/figlet.js` fonts via `scripts/gen-fonts.mjs` (`npm run gen:fonts`)
+- **ANSI Shadow punctuation was offset by one character** - the `! " # $ % & ' ( ) * + , - . / : ; < = > ? @` glyphs were shifted one slot, so e.g. `#` drew the `"` art and `&` drew `#` art; the `[ ] ^ _` glyphs were also missing entirely (rendered blank). The punctuation is now corrected to the canonical ANSI Shadow definitions (letters and digits were already correct and are untouched)
+- **ASCII header and heading showed a stray vertical scrollbar** - `.ascii-header-output` and `.nexus-heading-output` set `overflow-x: auto` with the default `overflow-y: visible`, which the CSS spec computes to a vertical scroll container; the full-block glyphs (`█ ╗ ╔`) slightly overflow the `line-height: 1` line box, so the header could be scrolled up/down. The horizontal scrollers now pin `overflow-y: hidden` and the surrounding wrappers use `overflow: hidden`
 - **Heatmap month labels sat one column too far right** - month anchors were measured from a noon cursor against a midnight range start, and rounding pulled the fractional day up a full day, so any month whose 1st landed on the week column's last day was anchored into the _next_ week (e.g. Nov and Aug in a 52-week view); anchors now use the exact calendar-day distance. Month labels are also collected per year-month instead of month number, so a range that crosses a year boundary or repeats a month name (over 52 weeks) keeps every label in order instead of dropping/overlapping them
 - **Heatmap outer week columns were still clipped** - the 52-week calendar's nested CSS grid (53 outer tracks vs 52 inner tracks, each with its own gaps) was sized in two independent passes that drifted apart by one gap, so the first/last (Nov/Oct) columns kept losing a hairline at the panel edge even after the track clamp. The heatmap is now a single self-scaling inline `<svg>` with a `viewBox`, drawn the way the DKirwan `calendar-heatmap` reference is, so `width: 100%` fits it to any panel or column and there is no inner grid or `overflow` left to clip against. Cell geometry is centralised in an exported `HEATMAP_GEOMETRY` (11px cell, 2px gap, 2px radius, 28px day gutter, 16px month header) and the per-day cells, counts and tooltips are unchanged
+- **New Note button was taller than the stat cards** - the button and its label had no line-height, so the label inherited Obsidian's global ~1.5 line-height (~15.7 px) while the stat cards force `line-height: 1` (~13.6 px); with the row centered on its cross-axis the button sat ~2 px taller. The button row is now `align-items: stretch` and the button + label force `line-height: 1`, so every box on the row is exactly the same height
+
+### Removed
+
+- **File-type chart stacked bar** - the horizontal composition bar above the legend was removed; the block is now just the total count plus the per-extension list (extension, count, percentage, accent swatch). The accent ramp still colours the legend swatches, now mixed in `oklab` (perceptually even steps) and ordered strong → light so the largest type gets the full accent
+
+### Changed
+
+- **Heatmap scale** - the 4 intensity levels now blend in `oklab` (40 / 60 / 80 / 100 %) instead of `srgb` (30 / 50 / 70 / 100 %), so the steps are perceptually even
 
 ## v1.4.0 — 2026-09-17
 

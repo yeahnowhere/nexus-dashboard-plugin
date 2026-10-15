@@ -228,15 +228,15 @@ clock:
 ````
 
 ### File Types
-A stacked composition bar showing the share of file types in your vault, with a
-total file count and a legend listing every extension present (e.g. `md`,
-`canvas`, `png`, `js`). Every extension gets its own row and color from a
-theme-accent ramp that adapts to any theme or accent color. The legend wraps into
-multiple columns and caps at the configured height, scrolling internally when
-the vault has many extensions. Optionally scope it to a single folder. In the
-dashboard layout builder you can create named **file-type lists** (folder +
-label + optional max height) in the Components tab and assign one to any
-row/column slot.
+A per-extension composition list showing the share of file types in your vault,
+with a total file count and a legend listing every extension present (e.g. `md`,
+`canvas`, `png`, `js`). Every extension gets its own row, count, percentage and
+color from a theme-accent ramp that adapts to any theme or accent color. The
+legend wraps into multiple columns and caps at the configured height, scrolling
+internally when the vault has many extensions. Optionally scope it to a single
+folder. In the dashboard layout builder you can create named **file-type lists**
+(folder + label + optional max height) in the Components tab and assign one to
+any row/column slot.
 
 Properties: `show` (true/false), `path` (vault-relative folder; empty = whole vault), `label`, `height` (max legend height in px, e.g. `200`)
 
@@ -387,7 +387,7 @@ The content blocks are configured in **Settings → Components**. Each component
 - **Heatmap** — a GitHub-style contribution calendar of your vault activity (weeks, label).
 - **Activity Timeline** — a chronological log of vault activity (new/modified/deleted files and folders) with day grouping, relative times, and date chips. `MODIFIED` events update live as you edit. External renames are detected via delete+create pairing and startup mtime reconciliation, so they appear as `renamed` instead of a spurious delete. Toggles for activity tracking, task tracking, and markdown-only filtering live here.
 - **Clock** — a digital clock; set the timezone, show date/seconds, and pick a 12h/24h format.
-- **File Types** — a horizontal bar chart of file types in your vault (max types, label).
+- **File Types** — a per-extension list of file types in your vault with counts and percentages (max legend height, label).
 - **Task Summary** — open/done tasks with a progress bar and a task list; filter by path or comma-separated tags, and set the max tasks shown.
 - **Divider Style** — global gradient line, line width, label size/weight/color/spacing, and named presets (default, bold, subtle, gradient, dashed).
 
@@ -405,3 +405,7 @@ npm run build        # typecheck + production build
 ## License
 
 [MIT](LICENSE)
+
+## Credits
+
+- ASCII header fonts generated/derived from [FIGlet](https://github.com/patorjk/figlet.js) fonts (`Slant`, `Small Slant`, `Standard`, `Graffiti`, `ANSI Shadow`) — © contributors, licensed under the FIGlet license (MIT). The built font data in `src/fonts/*.ts` is programmatically generated from canonical `.flf` sources by `scripts/gen-fonts.mjs`.

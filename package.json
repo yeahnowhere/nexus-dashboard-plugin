@@ -6,6 +6,7 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "npm run typecheck && node esbuild.config.mjs production",
 		"deploy": "node scripts/deploy.mjs",
+		"gen:fonts": "node scripts/gen-fonts.mjs",
 		"typecheck": "tsc --noEmit",
 		"lint": "eslint src/",
 		"format": "prettier --write src/",

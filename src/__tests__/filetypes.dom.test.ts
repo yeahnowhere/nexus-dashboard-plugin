@@ -13,7 +13,7 @@ function makeConfig(overrides: Partial<FileTypeChartConfig> = {}): FileTypeChart
 }
 
 describe("renderFileTypeChart", () => {
-	it("renders a composition bar with a total line", () => {
+	it("renders a composition list with a total line", () => {
 		const ctx = makeContext({
 			files: [
 				{ path: "a.md" },
@@ -27,10 +27,9 @@ describe("renderFileTypeChart", () => {
 		const el = host();
 		renderFileTypeChart(ctx, el, makeConfig());
 
-		const bar = el.querySelector<HTMLElement>(".nexus-filetypes-bar");
-		expect(bar).not.toBeNull();
 		expect(el.querySelector(".nexus-panel .nexus-filetypes")).not.toBeNull();
-		expect(bar?.querySelectorAll(".nexus-filetypes-bar-segment").length).toBe(5);
+		expect(el.querySelector(".nexus-filetypes-bar")).toBeNull();
+		expect(el.querySelectorAll(".nexus-filetypes-legend-row").length).toBe(5);
 
 		const total = el.querySelector(".nexus-filetypes-total");
 		expect(total?.textContent).toBe("6 files");

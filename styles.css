@@ -3,7 +3,7 @@
    ============================================================ */
 
 .nexus-heading-wrapper {
-  overflow-x: hidden;
+  overflow: hidden;
   padding: 4px 0;
 }
 
@@ -27,6 +27,7 @@
   margin: 0;
   padding: 4px 0;
   overflow-x: auto;
+  overflow-y: hidden;
   background: transparent !important;
   border: none !important;
 }
@@ -38,7 +39,7 @@
 .nexus-stats {
   display: flex;
   justify-content: flex-start;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
   padding: 6px 0;
   flex-wrap: wrap;
@@ -92,6 +93,7 @@
   border-radius: 8px;
   font-size: 0.78rem;
   font-weight: 600;
+  line-height: 1;
   white-space: nowrap;
   flex: 1 1 auto;
   min-width: 0;
@@ -110,6 +112,10 @@
 .nexus-stat-new-note svg {
   color: var(--interactive-accent);
   flex-shrink: 0;
+}
+
+.nexus-stat-new-note-label {
+  line-height: 1;
 }
 
 .nexus-stat-entry {
@@ -692,7 +698,7 @@
    ============================================================ */
 
 .ascii-header-wrapper {
-  overflow-x: hidden;
+  overflow: hidden;
   padding: 4px 0;
   text-align: center;
 }
@@ -713,6 +719,7 @@
   margin: 0;
   padding: 16px 0;
   overflow-x: auto;
+  overflow-y: hidden;
   background: transparent !important;
 }
 
@@ -722,15 +729,17 @@
   line-height: 1 !important;
   white-space: pre;
   margin: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .is-phone .ascii-header-wrapper {
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .is-phone .markdown-preview-section .ascii-header-wrapper .ascii-header-output {
   font-size: calc(var(--nexus-ascii-mobile-size, 0.5) * 1em) !important;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .is-phone .markdown-preview-section .ascii-header-preview {
@@ -1741,15 +1750,15 @@ select.dropdown option:disabled {
 }
 
 .nexus-heatmap-cell-level-1 {
-  fill: color-mix(in srgb, var(--interactive-accent) 30%, var(--background-secondary));
+  fill: color-mix(in oklab, var(--interactive-accent) 40%, var(--background-secondary));
 }
 
 .nexus-heatmap-cell-level-2 {
-  fill: color-mix(in srgb, var(--interactive-accent) 50%, var(--background-secondary));
+  fill: color-mix(in oklab, var(--interactive-accent) 60%, var(--background-secondary));
 }
 
 .nexus-heatmap-cell-level-3 {
-  fill: color-mix(in srgb, var(--interactive-accent) 70%, var(--background-secondary));
+  fill: color-mix(in oklab, var(--interactive-accent) 80%, var(--background-secondary));
 }
 
 .nexus-heatmap-cell-level-4 {
@@ -2020,21 +2029,23 @@ select.dropdown option:disabled {
 }
 
 /* ============================================================
-   Nexus File Types — Stacked composition bar
+   Nexus File Types — per-extension composition list
    ============================================================ */
 
 .nexus-filetypes {
   /* Theme-adaptive palette — a ramp of the theme accent blended against the
-     card background so the chart follows any theme/accent and every slot
-     stays clearly visible. */
-  --nexus-ft-0: color-mix(in srgb, var(--interactive-accent) 25%, var(--background-secondary));
-  --nexus-ft-1: color-mix(in srgb, var(--interactive-accent) 35%, var(--background-secondary));
-  --nexus-ft-2: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-secondary));
-  --nexus-ft-3: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-secondary));
-  --nexus-ft-4: color-mix(in srgb, var(--interactive-accent) 65%, var(--background-secondary));
-  --nexus-ft-5: color-mix(in srgb, var(--interactive-accent) 75%, var(--background-secondary));
-  --nexus-ft-6: color-mix(in srgb, var(--interactive-accent) 88%, var(--background-secondary));
-  --nexus-ft-7: var(--interactive-accent);
+     card background so the legend follows any theme/accent and every slot
+     stays clearly visible. Mixed in oklab (perceptual) so steps look evenly
+     spaced instead of muddy, and ordered strong → light so the largest type
+     gets the full accent. */
+  --nexus-ft-0: var(--interactive-accent);
+  --nexus-ft-1: color-mix(in oklab, var(--interactive-accent) 92%, var(--background-secondary));
+  --nexus-ft-2: color-mix(in oklab, var(--interactive-accent) 84%, var(--background-secondary));
+  --nexus-ft-3: color-mix(in oklab, var(--interactive-accent) 76%, var(--background-secondary));
+  --nexus-ft-4: color-mix(in oklab, var(--interactive-accent) 68%, var(--background-secondary));
+  --nexus-ft-5: color-mix(in oklab, var(--interactive-accent) 60%, var(--background-secondary));
+  --nexus-ft-6: color-mix(in oklab, var(--interactive-accent) 52%, var(--background-secondary));
+  --nexus-ft-7: color-mix(in oklab, var(--interactive-accent) 45%, var(--background-secondary));
   margin-top: 0.5rem;
 }
 
@@ -2043,19 +2054,6 @@ select.dropdown option:disabled {
   font-weight: 600;
   color: var(--text-normal);
   margin-bottom: 0.3rem;
-}
-
-.nexus-filetypes-bar {
-  display: flex;
-  width: 100%;
-  height: 14px;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.nexus-filetypes-bar-segment {
-  height: 100%;
-  min-width: 0;
 }
 
 .nexus-filetypes-legend {

@@ -25,7 +25,7 @@ function filterByPath(files: TFile[], path: string | undefined): TFile[] {
 	});
 }
 
-/** Render the passive "Vault composition" stacked bar chart. */
+/** Render the passive "Vault composition" per-extension list. */
 export function renderFileTypeChart(
 	ctx: RendererContext,
 	containerEl: HTMLElement,
@@ -57,13 +57,6 @@ export function renderFileTypeChart(
 	const root = panel.createDiv({ cls: "nexus-filetypes" });
 
 	root.createDiv({ cls: "nexus-filetypes-total", text: `${total} files` });
-
-	const bar = root.createDiv({ cls: "nexus-filetypes-bar" });
-	for (let i = 0; i < items.length; i++) {
-		const segment = bar.createDiv({ cls: "nexus-filetypes-bar-segment" });
-		segment.style.width = `${(items[i].count / total) * 100}%`;
-		segment.style.background = `var(${FILETYPE_PALETTE[i % FILETYPE_PALETTE.length]})`;
-	}
 
 	const legend = root.createDiv({ cls: "nexus-filetypes-legend" });
 	const legendHeight = config.maxLegendHeight ?? ctx.settings.fileTypeLegendHeight;
