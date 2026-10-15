@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { renderHeatmap, computeLevelMap } from "../renderer/heatmap";
+import { renderHeatmap, computeLevelMap, HEATMAP_GEOMETRY } from "../renderer/heatmap";
 import { makeContext } from "./helpers/render-context";
 import type { HeatmapConfig } from "../types";
 
@@ -24,35 +24,40 @@ afterEach(() => {
 const day = (y: number, m: number, d: number, h = 9): number =>
 	new Date(y, m - 1, d, h, 0, 0).getTime();
 
-function cellTitleFor(scoped: Element, key: string): string | undefined {
-	const grid = scoped.querySelector<HTMLElement>(".nexus-heatmap-grid");
-	const cells = Array.from(grid?.querySelectorAll<HTMLElement>(".nexus-heatmap-cell") ?? []);
-	return cells.find((c) => c.title.startsWith(`${key}:`))?.title;
+const PITCH = HEATMAP_GEOMETRY.cell + HEATMAP_GEOMETRY.gap;
+const GUTTER = HEATMAP_GEOMETRY.dayLabelWidth;
+
+function cells(scoped: Element): SVGRectElement[] {
+	return Array.from(
+		scoped.querySelectorAll<SVGRectElement>(".nexus-heatmap-svg rect.nexus-heatmap-cell"),
+	);
 }
 
-/** Month labels with their grid column (anchor) and span, in render order. */
-function monthLabels(scoped: Element): { text: string; anchor: number; span: number }[] {
-	const row = scoped.querySelector(".nexus-heatmap-months");
-	const spacers = Array.from(
-		row?.querySelectorAll<HTMLElement>(".nexus-heatmap-month-spacer") ?? [],
-	);
-	return spacers
-		.filter((s) => s.textContent)
-		.map((s) => {
-			const m = s.style.gridColumn.match(/^(\d+) \/ span (\d+)$/);
-			return {
-				text: s.textContent ?? "",
-				anchor: Number(m?.[1]) - 2,
-				span: Number(m?.[2]),
-			};
-		});
+function cellTitle(rect: SVGRectElement): string {
+	return rect.querySelector("title")?.textContent ?? "";
+}
+
+function cellTitleFor(scoped: Element, key: string): string | undefined {
+	const rect = cells(scoped).find((c) => cellTitle(c).startsWith(`${key}:`));
+	return rect ? cellTitle(rect) : undefined;
+}
+
+/** Month labels in render order, with their x coordinate. */
+function monthLabels(scoped: Element): { text: string; x: number }[] {
+	const els = Array.from(scoped.querySelectorAll<SVGTextElement>(".nexus-heatmap-month"));
+	return els.map((s) => ({ text: s.textContent ?? "", x: Number(s.getAttribute("x")) }));
+}
+
+/** Week column a month label is anchored to, derived from its x coordinate. */
+function anchorOf(x: number): number {
+	return Math.round((x - GUTTER) / PITCH);
 }
 
 /** Every month anchor must advance, so labels never overlap or go backwards. */
-function anchorsMonotonic(labels: { text: string; anchor: number; span: number }[]): void {
+function anchorsMonotonic(labels: { text: string; x: number }[]): void {
 	for (let i = 0; i < labels.length; i++) {
-		expect(labels[i].anchor).toBeGreaterThanOrEqual(0);
-		if (i > 0) expect(labels[i].anchor).toBeGreaterThan(labels[i - 1].anchor);
+		expect(anchorOf(labels[i].x)).toBeGreaterThanOrEqual(0);
+		if (i > 0) expect(anchorOf(labels[i].x)).toBeGreaterThan(anchorOf(labels[i - 1].x));
 	}
 }
 
@@ -90,17 +95,22 @@ describe("computeLevelMap", () => {
 });
 
 describe("renderHeatmap", () => {
-	it("renders a grid with 7 * weeks cells and the weeks CSS variable", () => {
+	it("renders an svg with 7 * weeks cells and a matching viewBox", () => {
 		const ctx = makeContext();
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 4 }));
 
-		const heatmap = el.querySelector<HTMLElement>(".nexus-heatmap");
+		const heatmap = el.querySelector(".nexus-heatmap");
 		expect(heatmap).not.toBeNull();
 		expect(el.querySelector(".nexus-panel .nexus-heatmap")).not.toBeNull();
-		expect(heatmap?.style.getPropertyValue("--nexus-heatmap-weeks")).toBe("4");
-		const grid = heatmap?.querySelector<HTMLElement>(".nexus-heatmap-grid");
-		expect(grid?.querySelectorAll(".nexus-heatmap-cell").length).toBe(28);
+		const svg = heatmap?.querySelector<SVGSVGElement>(".nexus-heatmap-svg");
+		expect(svg).not.toBeNull();
+
+		const expectedWidth = GUTTER + 4 * PITCH - HEATMAP_GEOMETRY.gap;
+		const expectedHeight = HEATMAP_GEOMETRY.monthLabelHeight + 7 * PITCH - HEATMAP_GEOMETRY.gap;
+		expect(svg?.getAttribute("viewBox")).toBe(`0 0 ${expectedWidth} ${expectedHeight}`);
+
+		expect(cells(el).length).toBe(28);
 	});
 
 	it("marks cells after today as empty", () => {
@@ -108,9 +118,7 @@ describe("renderHeatmap", () => {
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 4 }));
 
-		const heatmap = el.querySelector<HTMLElement>(".nexus-heatmap");
-		const grid = heatmap?.querySelector<HTMLElement>(".nexus-heatmap-grid");
-		expect(grid?.querySelectorAll(".nexus-heatmap-cell-empty").length).toBeGreaterThan(0);
+		expect(el.querySelectorAll(".nexus-heatmap-cell-empty").length).toBeGreaterThan(0);
 	});
 
 	it("tags today's cell and levels active days from file mtimes", () => {
@@ -123,16 +131,13 @@ describe("renderHeatmap", () => {
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 4 }));
 
-		const heatmap = el.querySelector<HTMLElement>(".nexus-heatmap");
-		const grid = heatmap?.querySelector<HTMLElement>(".nexus-heatmap-grid");
-		const cells = Array.from(grid?.querySelectorAll<HTMLElement>(".nexus-heatmap-cell") ?? []);
-
-		const todayCell = cells.find((c) => c.classList.contains("nexus-heatmap-cell-today"));
+		const todayCell = cells(el).find((c) => c.classList.contains("nexus-heatmap-cell-today"));
 		expect(todayCell).toBeDefined();
-		expect(todayCell?.title).toContain("2026-08-06");
-		expect(
-			todayCell?.className.split(" ").some((c) => /^nexus-heatmap-cell-level-[1-4]$/.test(c)),
-		).toBe(true);
+		expect(cellTitle(todayCell as SVGRectElement)).toContain("2026-08-06");
+		const todayClasses = todayCell?.getAttribute("class") ?? "";
+		expect(todayClasses.split(" ").some((c) => /^nexus-heatmap-cell-level-[1-4]$/.test(c))).toBe(
+			true,
+		);
 	});
 
 	it("counts activity-log events that have no matching vault file", () => {
@@ -157,11 +162,9 @@ describe("renderHeatmap", () => {
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 4 }));
 
-		const grid = el.querySelector<HTMLElement>(".nexus-heatmap-grid");
-		const cells = Array.from(grid?.querySelectorAll<HTMLElement>(".nexus-heatmap-cell") ?? []);
 		const levelOf = (key: string): number => {
-			const cell = cells.find((c) => c.title.startsWith(`${key}:`));
-			const match = cell?.className.match(/nexus-heatmap-cell-level-(\d)/);
+			const cell = cells(el).find((c) => cellTitle(c).startsWith(`${key}:`));
+			const match = (cell?.getAttribute("class") ?? "").match(/nexus-heatmap-cell-level-(\d)/);
 			return match ? Number(match[1]) : 0;
 		};
 		const today = levelOf("2026-08-06");
@@ -211,14 +214,16 @@ describe("renderHeatmap", () => {
 		expect(cellTitleFor(el, "2026-08-05")).toBe("2026-08-05: 1 file");
 	});
 
-	it("renders month labels and day labels", () => {
+	it("renders month labels and the three day labels", () => {
 		const ctx = makeContext();
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 20 }));
 
-		const heatmap = el.querySelector<HTMLElement>(".nexus-heatmap");
-		expect(heatmap?.querySelectorAll(".nexus-heatmap-month-spacer").length).toBeGreaterThan(1);
-		expect(heatmap?.querySelectorAll(".nexus-heatmap-day-label").length).toBe(7);
+		expect(el.querySelectorAll(".nexus-heatmap-month").length).toBeGreaterThan(1);
+		const dayLabels = Array.from(el.querySelectorAll<SVGTextElement>(".nexus-heatmap-day")).map(
+			(s) => s.textContent,
+		);
+		expect(dayLabels).toEqual(["Mon", "Wed", "Fri"]);
 	});
 
 	it("anchors month labels to the week column where each month starts", () => {
@@ -226,23 +231,14 @@ describe("renderHeatmap", () => {
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 20 }));
 
-		const heatmap = el.querySelector<HTMLElement>(".nexus-heatmap");
-		const labels = Array.from(
-			heatmap?.querySelectorAll<HTMLElement>(".nexus-heatmap-month-spacer") ?? [],
-		).filter((s) => s.textContent);
+		const labels = monthLabels(el);
 
 		// System time is 2026-08-06 with 20 weeks: range starts Sun 2026-03-22.
 		// March is cut at the left edge, so labels run Apr..Aug and each label
-		// begins at the column containing that month's 1st (grid line start+2).
-		expect(labels.map((l) => l.textContent)).toEqual(["Apr", "May", "Jun", "Jul", "Aug"]);
-
-		const parse = (gc: string): { start: number; span: number } => {
-			const m = gc.match(/^(\d+) \/ span (\d+)$/);
-			return { start: Number(m?.[1]), span: Number(m?.[2]) };
-		};
+		// begins at the column containing that month's 1st.
+		expect(labels.map((l) => l.text)).toEqual(["Apr", "May", "Jun", "Jul", "Aug"]);
 
 		const dayMs = 86_400_000;
-		// Exact calendar-day distance (date-only UTC), matching the renderer.
 		const utcDay = (d: Date): number => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
 		const rangeStart = new Date(2026, 2, 22);
 		const colFor = (month: number): number => {
@@ -250,17 +246,8 @@ describe("renderHeatmap", () => {
 			return Math.floor((utcDay(first) - utcDay(rangeStart)) / dayMs / 7);
 		};
 
-		const starts = labels.map((l) => parse(l.style.gridColumn).start);
-		const anchors = starts.map((s) => s - 2);
-		expect(anchors).toEqual([3, 4, 5, 6, 7].map((m) => colFor(m)));
-
-		for (let i = 0; i < starts.length; i++) {
-			expect(starts[i]).toBeGreaterThanOrEqual(2);
-			if (i > 0) expect(starts[i]).toBeGreaterThan(starts[i - 1]);
-		}
-
-		const last = parse(labels[labels.length - 1].style.gridColumn);
-		expect(last.start + last.span).toBeLessThanOrEqual(22);
+		expect(labels.map((l) => anchorOf(l.x))).toEqual([3, 4, 5, 6, 7].map(colFor));
+		anchorsMonotonic(labels);
 	});
 
 	it("anchors a month whose 1st falls on the week column's last day without shifting right", () => {
@@ -271,8 +258,7 @@ describe("renderHeatmap", () => {
 		const el = host();
 		renderHeatmap(ctx, el, makeConfig({ weeks: 20 }));
 
-		const labels = monthLabels(el);
-		const aug = labels.find((l) => l.text === "Aug");
+		const aug = monthLabels(el).find((l) => l.text === "Aug");
 		expect(aug).toBeDefined();
 
 		const utcDay = (d: Date): number => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
@@ -280,7 +266,7 @@ describe("renderHeatmap", () => {
 		const start = new Date(2026, 2, 22);
 		const aug1 = new Date(2026, 7, 1);
 		const expectedCol = Math.floor((utcDay(aug1) - utcDay(start)) / dayMs / 7);
-		expect(aug?.anchor).toBe(expectedCol);
+		expect(anchorOf(aug?.x ?? NaN)).toBe(expectedCol);
 	});
 
 	it("keeps month labels chronological when the range crosses a year boundary", () => {
@@ -292,8 +278,8 @@ describe("renderHeatmap", () => {
 		const labels = monthLabels(el);
 		expect(labels.map((l) => l.text)).toEqual(["Dec", "Jan"]);
 		anchorsMonotonic(labels);
-		expect(labels[0].anchor).toBe(1);
-		expect(labels[1].anchor).toBe(5);
+		expect(anchorOf(labels[0].x)).toBe(1);
+		expect(anchorOf(labels[1].x)).toBe(5);
 	});
 
 	it("shows repeated month names across a range longer than a year without colliding", () => {
@@ -320,8 +306,8 @@ describe("renderHeatmap", () => {
 			"Jan",
 		]);
 		anchorsMonotonic(labels);
-		expect(labels[0].anchor).toBe(0);
-		expect(labels[labels.length - 1].anchor).toBe(52);
+		expect(anchorOf(labels[0].x)).toBe(0);
+		expect(anchorOf(labels[labels.length - 1].x)).toBe(52);
 	});
 
 	it("renders the divider label from config", () => {

@@ -7,6 +7,46 @@ import { renderDivider } from "./dividers";
 const EDIT_ACTIONS = new Set(["created", "modified", "moved", "renamed"]);
 
 /**
+ * Base SVG geometry, in user units. The whole chart scales to the panel width
+ * via `viewBox` + `width: 100%`, so these numbers only set the proportions
+ * (cell size, gutter, gaps) — never a pixel overflow.
+ */
+export const HEATMAP_GEOMETRY = {
+	/** Day square edge length. */
+	cell: 11,
+	/** Gap between day squares. */
+	gap: 2,
+	/** Left gutter reserved for the Mon/Wed/Fri day labels. */
+	dayLabelWidth: 28,
+	/** Top band reserved for the month labels. */
+	monthLabelHeight: 16,
+	/** Day square corner radius. */
+	cellRadius: 2,
+} as const;
+
+/** Column pitch (cell + gap) and derived grid metrics. */
+const PITCH = HEATMAP_GEOMETRY.cell + HEATMAP_GEOMETRY.gap;
+
+/** Months whose first day anchors a label. */
+const MONTH_NAMES = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec",
+];
+
+/** Day-label rows (Mon, Wed, Fri) keyed by weekday index. */
+const DAY_LABELS: Record<number, string> = { 1: "Mon", 3: "Wed", 5: "Fri" };
+
+/**
  * Build an intensity level (1..4) for each distinct nonzero day count. Levels
  * are assigned by rank (quantile-ish), so common low counts stay light and a
  * single outlier day can't flatten the rest of the scale.
@@ -23,7 +63,11 @@ export function computeLevelMap(counts: number[]): Map<number, number> {
 	return map;
 }
 
-/** Render a GitHub-style contribution heatmap with a today ring. */
+/**
+ * Render a GitHub-style contribution heatmap as a single, self-scaling SVG.
+ * One coordinate system means the outer week columns can never be clipped by
+ * nested-grid rounding; the chart simply scales to its panel.
+ */
 export function renderHeatmap(
 	ctx: RendererContext,
 	containerEl: HTMLElement,
@@ -87,110 +131,114 @@ export function renderHeatmap(
 	}
 
 	const panel = wrapper.createDiv({ cls: "nexus-panel" });
-
 	const heatmapEl = panel.createDiv({ cls: "nexus-heatmap" });
-	heatmapEl.style.setProperty("--nexus-heatmap-weeks", String(weeks));
 
-	// Month labels row — one spanned label per month
-	const monthRow = heatmapEl.createDiv({ cls: "nexus-heatmap-months" });
-	const monthNames = [
-		"Jan",
-		"Feb",
-		"Mar",
-		"Apr",
-		"May",
-		"Jun",
-		"Jul",
-		"Aug",
-		"Sep",
-		"Oct",
-		"Nov",
-		"Dec",
-	];
+	// One SVG, one coordinate system. The grid occupies the gutter + `weeks`
+	// columns; the top band holds the month labels.
+	const gridWidth = weeks * PITCH - HEATMAP_GEOMETRY.gap;
+	const width = HEATMAP_GEOMETRY.dayLabelWidth + gridWidth;
+	const height = HEATMAP_GEOMETRY.monthLabelHeight + 7 * PITCH - HEATMAP_GEOMETRY.gap;
 
-	// Empty spacer for day-label gutter alignment
-	const gutter = monthRow.createDiv({ cls: "nexus-heatmap-month-spacer" });
-	gutter.style.visibility = "hidden";
-	// Anchor each month label to the week column where that month begins
-	// (GitHub-style) instead of centering over a group, so partial months at
-	// the range edges stay aligned with their cells. Months whose 1st falls
-	// before the displayed range are skipped (no label over the leading cut).
-	// Collect one entry per month occurrence in chronological order — keying by
-	// year+month keeps a range that spans a year boundary (or repeats a month
-	// name) from colliding and corrupting the columns/spans.
-	const dayMs = 86_400_000;
-	const utcDay = (d: Date): number => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
-	const todayMonthKey = today.getFullYear() * 12 + today.getMonth();
-	const monthEntries: { month: number; col: number }[] = [];
-	let cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1, 12, 0, 0);
-	while (cursor.getFullYear() * 12 + cursor.getMonth() <= todayMonthKey) {
-		// Exact calendar-day distance (ignore time-of-day) so a month whose 1st
-		// is the last day of its week column isn't pushed one column too far.
-		const offset = Math.round((utcDay(cursor) - utcDay(startDate)) / dayMs);
-		if (offset >= 0) {
-			const col = Math.floor(offset / 7);
-			if (col >= 0 && col < weeks) monthEntries.push({ month: cursor.getMonth(), col });
-		}
-		cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12, 0, 0);
-	}
+	const svg = heatmapEl.createSvg("svg", {
+		cls: "nexus-heatmap-svg",
+		attr: {
+			viewBox: `0 0 ${width} ${height}`,
+			preserveAspectRatio: "xMidYMid meet",
+			role: "img",
+			"aria-label": `Contribution activity, last ${weeks} weeks`,
+		},
+	});
 
-	for (let i = 0; i < monthEntries.length; i++) {
-		const start = monthEntries[i].col;
-		const end = i + 1 < monthEntries.length ? monthEntries[i + 1].col : weeks;
-		const spacer = monthRow.createDiv({ cls: "nexus-heatmap-month-spacer" });
-		spacer.textContent = monthNames[monthEntries[i].month];
-		spacer.style.gridColumn = `${start + 2} / span ${Math.max(1, end - start)}`;
-	}
+	renderMonthLabels(svg, startDate, today, weeks);
+	renderDayLabels(svg);
 
-	// Day labels + grid
-	const bodyEl = heatmapEl.createDiv({ cls: "nexus-heatmap-body" });
-	const dayLabels = bodyEl.createDiv({ cls: "nexus-heatmap-days" });
-	const dayAbbrevs = ["", "Mon", "", "Wed", "", "Fri", ""];
-	for (const abbr of dayAbbrevs) {
-		const lbl = dayLabels.createDiv({ cls: "nexus-heatmap-day-label" });
-		if (abbr) lbl.textContent = abbr;
-	}
-
-	const gridEl = bodyEl.createDiv({ cls: "nexus-heatmap-grid" });
-	gridEl.style.gridTemplateColumns = `repeat(${weeks}, minmax(0, 1fr))`;
-
+	// Day grid: one square per (week, weekday). Filled row-major by weekday so
+	// columns read as weeks, exactly like GitHub.
 	for (let d = 0; d < 7; d++) {
 		for (let w = 0; w < weeks; w++) {
 			const cellDate = new Date(startDate);
 			cellDate.setDate(cellDate.getDate() + w * 7 + d);
 			const key = dateKey(cellDate);
 			const count = dayCounts.get(key) || 0;
-			const cell = gridEl.createDiv({ cls: "nexus-heatmap-cell" });
-			cell.title = `${key}: ${count} file${count !== 1 ? "s" : ""}`;
 
+			const classes = ["nexus-heatmap-cell"];
 			if (cellDate > today) {
-				cell.classList.add("nexus-heatmap-cell-empty");
+				classes.push("nexus-heatmap-cell-empty");
 			} else if (count === 0) {
-				cell.classList.add("nexus-heatmap-cell-level-0");
+				classes.push("nexus-heatmap-cell-level-0");
 			} else {
 				const level = levelByCount.get(count) ?? 1;
-				cell.classList.add(`nexus-heatmap-cell-level-${level}`);
+				classes.push(`nexus-heatmap-cell-level-${level}`);
 			}
+			if (key === todayKey) classes.push("nexus-heatmap-cell-today");
 
-			if (key === todayKey) {
-				cell.classList.add("nexus-heatmap-cell-today");
-			}
+			const x = HEATMAP_GEOMETRY.dayLabelWidth + w * PITCH;
+			const y = HEATMAP_GEOMETRY.monthLabelHeight + d * PITCH;
+			const rect = svg.createSvg("rect", {
+				cls: classes,
+				attr: {
+					x,
+					y,
+					width: HEATMAP_GEOMETRY.cell,
+					height: HEATMAP_GEOMETRY.cell,
+					rx: HEATMAP_GEOMETRY.cellRadius,
+				},
+			});
+
+			const title = rect.createSvg("title", {});
+			title.textContent = `${key}: ${count} file${count !== 1 ? "s" : ""}`;
 		}
 	}
+}
 
-	if (document.body.classList.contains("is-phone")) {
-		requestAnimationFrame(() => {
-			requestAnimationFrame(() => {
-				const heatRect = heatmapEl.getBoundingClientRect();
-				const todayCell = heatmapEl.querySelector<HTMLElement>(".nexus-heatmap-cell-today");
-				if (todayCell) {
-					const cellRect = todayCell.getBoundingClientRect();
-					const target = cellRect.left - (heatRect.left + heatRect.width - cellRect.width);
-					heatmapEl.scrollLeft += Math.max(0, target);
-				} else {
-					heatmapEl.scrollLeft = heatmapEl.scrollWidth;
-				}
-			});
+/**
+ * Draw one month label per month occurrence in the range, anchored to the week
+ * column that contains that month's 1st (GitHub-style). Keyed chronologically
+ * so a range that crosses a year boundary — or repeats a month name over 52+
+ * weeks — keeps every label in order instead of colliding.
+ */
+function renderMonthLabels(svg: SVGSVGElement, startDate: Date, today: Date, weeks: number): void {
+	const dayMs = 86_400_000;
+	const utcDay = (d: Date): number => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+	const todayMonthKey = today.getFullYear() * 12 + today.getMonth();
+	const entries: { month: number; col: number }[] = [];
+
+	let cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1, 12, 0, 0);
+	while (cursor.getFullYear() * 12 + cursor.getMonth() <= todayMonthKey) {
+		const offset = Math.round((utcDay(cursor) - utcDay(startDate)) / dayMs);
+		if (offset >= 0) {
+			const col = Math.floor(offset / 7);
+			if (col >= 0 && col < weeks) entries.push({ month: cursor.getMonth(), col });
+		}
+		cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12, 0, 0);
+	}
+
+	for (const entry of entries) {
+		const text = svg.createSvg("text", {
+			cls: "nexus-heatmap-month",
+			attr: {
+				x: HEATMAP_GEOMETRY.dayLabelWidth + entry.col * PITCH,
+				y: HEATMAP_GEOMETRY.monthLabelHeight - 5,
+				"text-anchor": "start",
+			},
 		});
+		text.textContent = MONTH_NAMES[entry.month];
+	}
+}
+
+/** Draw the Mon/Wed/Fri day labels in the left gutter. */
+function renderDayLabels(svg: SVGSVGElement): void {
+	for (const [day, text] of Object.entries(DAY_LABELS)) {
+		const d = Number(day);
+		const label = svg.createSvg("text", {
+			cls: "nexus-heatmap-day",
+			attr: {
+				x: HEATMAP_GEOMETRY.dayLabelWidth - 6,
+				y: HEATMAP_GEOMETRY.monthLabelHeight + d * PITCH + HEATMAP_GEOMETRY.cell / 2,
+				"text-anchor": "end",
+				"dominant-baseline": "central",
+			},
+		});
+		label.textContent = text;
 	}
 }

@@ -17,6 +17,13 @@ export interface ObsidianDomElementInfo {
 	parent?: HTMLElement;
 }
 
+export interface ObsidianSvgElementInfo {
+	cls?: string | string[];
+	attr?: Record<string, string | number | boolean | null>;
+	parent?: Node;
+	prepend?: boolean;
+}
+
 type HTMLElementWithObsidianExtras = HTMLElement & {
 	createEl(tag: string, o?: ObsidianDomElementInfo): HTMLElement;
 	createDiv(o?: ObsidianDomElementInfo): HTMLDivElement;
@@ -91,6 +98,33 @@ export function applyObsidianDomPolyfill(): void {
 	proto.createButton = function (this: HTMLElement, o?: ObsidianDomElementInfo): HTMLButtonElement {
 		return this.createEl("button", o) as HTMLButtonElement;
 	};
+
+	// `createSvg` lives on `Node` in Obsidian (so SVG nodes can nest SVG), and
+	// must be reached from both HTML and SVG elements — hence `Node.prototype`.
+	// Assigned through a narrow cast so it doesn't have to satisfy Obsidian's
+	// overloaded global signature.
+	const nodeProto = Node.prototype as unknown as {
+		createSvg?: (tag: string, o?: ObsidianSvgElementInfo) => SVGElement;
+	};
+	if (typeof nodeProto.createSvg !== "function") {
+		nodeProto.createSvg = function (this: Node, tag: string, o?: ObsidianSvgElementInfo): SVGElement {
+			const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+			if (o) {
+				if (o.cls) {
+					const classes = Array.isArray(o.cls) ? o.cls : o.cls.split(" ");
+					el.classList.add(...classes);
+				}
+				if (o.attr) {
+					for (const [k, v] of Object.entries(o.attr)) {
+						if (v === null || v === undefined) continue;
+						el.setAttribute(k, String(v));
+					}
+				}
+			}
+			this.appendChild(el);
+			return el;
+		};
+	}
 
 	proto.empty = function (this: HTMLElement): void {
 		while (this.firstChild) {

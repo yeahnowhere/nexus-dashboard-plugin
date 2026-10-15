@@ -9,7 +9,8 @@
 
 ### Fixed
 
-- **Heatmap month labels sat one column too far right** - month anchors were measured from a noon cursor against a midnight range start, and rounding pulled the fractional day up a full day, so any month whose 1st landed on the week column's last day was anchored into the *next* week (e.g. Nov and Aug in a 52-week view); anchors now use the exact calendar-day distance. Month labels are also collected per year-month instead of month number, so a range that crosses a year boundary or repeats a month name (over 52 weeks) keeps every label in order instead of dropping/overlapping them
+- **Heatmap month labels sat one column too far right** - month anchors were measured from a noon cursor against a midnight range start, and rounding pulled the fractional day up a full day, so any month whose 1st landed on the week column's last day was anchored into the _next_ week (e.g. Nov and Aug in a 52-week view); anchors now use the exact calendar-day distance. Month labels are also collected per year-month instead of month number, so a range that crosses a year boundary or repeats a month name (over 52 weeks) keeps every label in order instead of dropping/overlapping them
+- **Heatmap outer week columns were still clipped** - the 52-week calendar's nested CSS grid (53 outer tracks vs 52 inner tracks, each with its own gaps) was sized in two independent passes that drifted apart by one gap, so the first/last (Nov/Oct) columns kept losing a hairline at the panel edge even after the track clamp. The heatmap is now a single self-scaling inline `<svg>` with a `viewBox`, drawn the way the DKirwan `calendar-heatmap` reference is, so `width: 100%` fits it to any panel or column and there is no inner grid or `overflow` left to clip against. Cell geometry is centralised in an exported `HEATMAP_GEOMETRY` (11px cell, 2px gap, 2px radius, 28px day gutter, 16px month header) and the per-day cells, counts and tooltips are unchanged
 
 ## v1.4.0 — 2026-09-17
 
