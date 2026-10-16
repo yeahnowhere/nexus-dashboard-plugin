@@ -1,5 +1,6 @@
 import { Notice, TFile } from "obsidian";
 import { parseDueDate, dueStatus, toggleTaskLine } from "../tasks";
+import { mapWithConcurrency } from "../utils";
 import type { TaskSummaryConfig } from "../types";
 import type { RendererContext } from "./context";
 import { renderDivider } from "./dividers";
@@ -19,7 +20,7 @@ export async function renderTaskSummary(
 	const filterPath = config.path || "";
 	const filterTags = config.tags || [];
 
-	const files = ctx.app.vault.getMarkdownFiles();
+	const files = ctx.snapshot.markdownFiles();
 	const filtered = files.filter((f) => {
 		if (filterPath && !f.path.startsWith(filterPath)) return false;
 		if (filterTags.length > 0) {
@@ -36,6 +37,10 @@ export async function renderTaskSummary(
 	let unindexed = 0;
 	const openTasks: { text: string; file: TFile; line: number; due: string | null }[] = [];
 
+	// Collect task-bearing files first (no I/O), then read them with bounded
+	// concurrency. A serial `await cachedRead` per file previously blocked
+	// every later block and any queued re-render on large vaults.
+	const taskFiles: TFile[] = [];
 	for (const file of filtered) {
 		const cache = ctx.app.metadataCache.getFileCache(file);
 		if (cache === null) {
@@ -44,11 +49,18 @@ export async function renderTaskSummary(
 			unindexed++;
 			continue;
 		}
-		const items = cache.listItems;
+		if (!cache.listItems) continue;
+		taskFiles.push(file);
+	}
+
+	const contents = await mapWithConcurrency(taskFiles, 16, (file) => ctx.app.vault.cachedRead(file));
+
+	for (let i = 0; i < taskFiles.length; i++) {
+		const file = taskFiles[i];
+		const items = ctx.app.metadataCache.getFileCache(file)?.listItems;
 		if (!items) continue;
 
-		const raw = await ctx.app.vault.cachedRead(file);
-		const lines = raw.split("\n");
+		const lines = (contents[i] ?? "").split("\n");
 
 		for (const item of items) {
 			if (item.task === undefined) continue;

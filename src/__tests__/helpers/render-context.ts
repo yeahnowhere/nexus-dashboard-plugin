@@ -132,6 +132,11 @@ export function makeContext(options: MakeContextOptions = {}): TestContext {
 		app,
 		settings,
 		sourcePath: options.sourcePath ?? "Dashboard.md",
+		snapshot: {
+			files: () => vault.getFiles(),
+			markdownFiles: () => vault.getMarkdownFiles(),
+			recentFiles: () => getRecentFiles(),
+		} as unknown as RendererContext["snapshot"],
 		files,
 		fileSpecs: specs,
 		getRecentFiles,

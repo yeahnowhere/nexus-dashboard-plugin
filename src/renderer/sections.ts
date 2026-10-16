@@ -33,8 +33,11 @@ export function renderSection(
 		gridEl.style.height = `${height}px`;
 	}
 
+	// Cards are built detached; batch them into a fragment so the grid costs
+	// one layout pass instead of one per appendChild.
+	const fragment = document.createDocumentFragment();
 	for (const cardConfig of section.cards) {
-		const cardEl = createCard(ctx, cardConfig);
-		gridEl.appendChild(cardEl);
+		fragment.appendChild(createCard(ctx, cardConfig));
 	}
+	gridEl.appendChild(fragment);
 }

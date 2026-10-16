@@ -1,4 +1,7 @@
 import type { ActivityEvent } from "./types";
+import { parentOf, isWithinPath } from "./utils";
+
+export { isWithinPath };
 
 /** Merge duplicate consecutive edits to the same path+action within this window. */
 export const TIMELINE_COALESCE_MS = 60_000;
@@ -66,17 +69,6 @@ export interface ReconcileOptions {
 export interface RenameRecovery {
 	events: ActivityEvent[];
 	consumed: ActivityEvent[];
-}
-
-/** True when `path` is inside the vault-relative `prefix` (or is the prefix itself). */
-export function isWithinPath(path: string, prefix: string): boolean {
-	const p = prefix.replace(/\/+$/, "");
-	return p.length === 0 || path === p || path.startsWith(p + "/");
-}
-
-function parentOf(path: string): string {
-	const i = path.lastIndexOf("/");
-	return i === -1 ? "" : path.slice(0, i);
 }
 
 function extensionOf(path: string): string {

@@ -374,3 +374,100 @@ describe("injectAllGraphLinks", () => {
 		expect(cacheOf(ctx).resolvedLinks["Nexus.md"]).toEqual({});
 	});
 });
+
+describe("injectAllGraphLinks (incremental)", () => {
+	const emptyBlock = "```nexus-dashboard\n```\n";
+	const mocFiles = DEFAULT_MOCS.map((m) => ({ path: m.path }));
+	const withCard = (path: string) =>
+		[
+			"```nexus-dashboard",
+			"section:",
+			"  cards:",
+			"    - type: big",
+			`      path: ${path}`,
+			"```",
+			"",
+		].join("\n");
+
+	it("re-reads only the changed paths after the first full scan", async () => {
+		const ctx = makeContext({
+			files: [
+				{ path: "A.md", content: emptyBlock },
+				{ path: "B.md", content: emptyBlock },
+				...mocFiles,
+			],
+		});
+		const spy = vi.spyOn(ctx.app.vault, "cachedRead");
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+		expect(spy.mock.calls.length).toBeGreaterThan(0);
+
+		spy.mockClear();
+		const spec = ctx.fileSpecs.find((s) => s.path === "B.md");
+		if (!spec) throw new Error("missing spec");
+		spec.content = `${emptyBlock}\n`;
+		await injectAllGraphLinks(ctx.app, ctx.settings, ["B.md"]);
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(spy.mock.calls[0][0]).toMatchObject({ path: "B.md" });
+	});
+
+	it("keeps other dashboards' cached edges during an incremental scan", async () => {
+		const ctx = makeContext({
+			files: [
+				{ path: "MOC/A MOC.md", content: withCard("MOC/Sub-A.md") },
+				{ path: "MOC/B MOC.md", content: withCard("MOC/Sub-B.md") },
+				{ path: "MOC/Sub-A.md" },
+				{ path: "MOC/Sub-B.md" },
+			],
+		});
+
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+		expect(cacheOf(ctx).resolvedLinks["MOC/A MOC.md"]).toEqual({ "MOC/Sub-A.md": 1 });
+		expect(cacheOf(ctx).resolvedLinks["MOC/B MOC.md"]).toEqual({ "MOC/Sub-B.md": 1 });
+
+		const spec = ctx.fileSpecs.find((s) => s.path === "MOC/B MOC.md");
+		if (!spec) throw new Error("missing spec");
+		spec.content = withCard("MOC/Sub-A.md");
+		await injectAllGraphLinks(ctx.app, ctx.settings, ["MOC/B MOC.md"]);
+
+		expect(cacheOf(ctx).resolvedLinks["MOC/A MOC.md"]).toEqual({ "MOC/Sub-A.md": 1 });
+		expect(cacheOf(ctx).resolvedLinks["MOC/B MOC.md"]).toEqual({ "MOC/Sub-A.md": 1 });
+	});
+
+	it("rebuilds cached edges on a settings change without re-reading the vault", async () => {
+		const ctx = makeContext({
+			files: [{ path: "Nexus.md", content: emptyBlock }, ...mocFiles],
+		});
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+		expect(Object.keys(cacheOf(ctx).resolvedLinks["Nexus.md"])).toHaveLength(DEFAULT_MOCS.length);
+
+		const spy = vi.spyOn(ctx.app.vault, "cachedRead");
+		const trimmed = DEFAULT_MOCS.slice(1);
+		ctx.settings.mocs = trimmed.map((m) => ({ ...m }));
+		await injectAllGraphLinks(ctx.app, ctx.settings, []);
+
+		expect(spy).not.toHaveBeenCalled();
+		expect(cacheOf(ctx).resolvedLinks["Nexus.md"]).toEqual(
+			Object.fromEntries(trimmed.map((m) => [m.path, 1])),
+		);
+	});
+
+	it("an undefined changedPaths list forces a full scan even after the first pass", async () => {
+		const ctx = makeContext({
+			files: [
+				{ path: "A.md", content: withCard("MOC/Sub-A.md") },
+				{ path: "MOC/Sub-A.md" },
+				{ path: "MOC/Sub-B.md" },
+			],
+		});
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		const spec = ctx.fileSpecs.find((s) => s.path === "A.md");
+		if (!spec) throw new Error("missing spec");
+		spec.content = withCard("MOC/Sub-B.md");
+		await injectAllGraphLinks(ctx.app, ctx.settings);
+
+		expect(cacheOf(ctx).resolvedLinks["A.md"]).toEqual({ "MOC/Sub-B.md": 1 });
+	});
+});

@@ -108,12 +108,12 @@ describe("getRowProportionSaved", () => {
 });
 
 describe("renderRow", () => {
-	it("renders columns and dividers and dispatches each child", () => {
+	it("renders columns and dividers and dispatches each child", async () => {
 		const ctx = makeContext();
 		const el = host();
 		const row = rowOf(3);
 		const dispatch = makeDispatch();
-		renderRow(ctx, el, row, makeConfig([row]), dispatch);
+		await renderRow(ctx, el, row, makeConfig([row]), dispatch);
 
 		const rowEl = el.querySelector<HTMLElement>(".nexus-row");
 		expect(rowEl).not.toBeNull();
@@ -125,64 +125,64 @@ describe("renderRow", () => {
 		expect(rowEl?.querySelectorAll(".stub-block").length).toBe(3);
 	});
 
-	it("renders nothing for an empty row", () => {
+	it("renders nothing for an empty row", async () => {
 		const ctx = makeContext();
 		const el = host();
-		renderRow(ctx, el, rowOf(0), makeConfig([]), makeDispatch());
+		await renderRow(ctx, el, rowOf(0), makeConfig([]), makeDispatch());
 		expect(el.querySelector(".nexus-row")).toBeNull();
 	});
 
-	it("caps columns at the configured count", () => {
+	it("caps columns at the configured count", async () => {
 		const ctx = makeContext();
 		const el = host();
 		const row = rowOf(3, { columns: 2 });
 		const dispatch = makeDispatch();
-		renderRow(ctx, el, row, makeConfig([row]), dispatch);
+		await renderRow(ctx, el, row, makeConfig([row]), dispatch);
 
 		expect(el.querySelectorAll(".nexus-row-col").length).toBe(2);
 		expect(el.querySelectorAll(".nexus-row-divider").length).toBe(1);
 		expect(dispatch).toHaveBeenCalledTimes(2);
 	});
 
-	it("applies a custom proportion to column widths", () => {
+	it("applies a custom proportion to column widths", async () => {
 		const ctx = makeContext();
 		const el = host();
 		const row = rowOf(2, { proportion: "70/30" });
-		renderRow(ctx, el, row, makeConfig([row]), makeDispatch());
+		await renderRow(ctx, el, row, makeConfig([row]), makeDispatch());
 
 		const cols = el.querySelectorAll<HTMLElement>(".nexus-row-col");
 		expect(cols[0]?.style.getPropertyValue("--nexus-row-width")).toBe("70%");
 		expect(cols[1]?.style.getPropertyValue("--nexus-row-width")).toBe("30%");
 	});
 
-	it("prefers a saved proportion over the row proportion", () => {
+	it("prefers a saved proportion over the row proportion", async () => {
 		const ctx = makeContext({
 			settings: { rowSizes: { "Dashboard.md:row:0": "80/20" } },
 		});
 		const el = host();
 		const row = rowOf(2, { proportion: "70/30" });
-		renderRow(ctx, el, row, makeConfig([row]), makeDispatch());
+		await renderRow(ctx, el, row, makeConfig([row]), makeDispatch());
 
 		const cols = el.querySelectorAll<HTMLElement>(".nexus-row-col");
 		expect(cols[0]?.style.getPropertyValue("--nexus-row-width")).toBe("80%");
 	});
 
-	it("applies a gap to the row", () => {
+	it("applies a gap to the row", async () => {
 		const ctx = makeContext();
 		const el = host();
 		const row = rowOf(2, { gap: "1rem" });
-		renderRow(ctx, el, row, makeConfig([row]), makeDispatch());
+		await renderRow(ctx, el, row, makeConfig([row]), makeDispatch());
 
 		expect(el.querySelector<HTMLElement>(".nexus-row")?.style.gap).toBe("1rem");
 	});
 });
 
 describe("renderColumn", () => {
-	it("stacks children with dividers and applies spacing", () => {
+	it("stacks children with dividers and applies spacing", async () => {
 		const el = host();
 		const column = columnOf(3, { spacing: "0.5rem" });
 		const dispatch = makeDispatch();
-		renderColumn(el, column, makeConfig([column]), dispatch);
+		await renderColumn(el, column, makeConfig([column]), dispatch);
 
 		const columnEl = el.querySelector<HTMLElement>(".nexus-column");
 		expect(columnEl).not.toBeNull();
@@ -192,27 +192,27 @@ describe("renderColumn", () => {
 		expect(dispatch).toHaveBeenCalledTimes(3);
 	});
 
-	it("maps align values to align-items", () => {
+	it("maps align values to align-items", async () => {
 		const el = host();
-		renderColumn(el, columnOf(1, { align: "left" }), makeConfig([]), makeDispatch());
+		await renderColumn(el, columnOf(1, { align: "left" }), makeConfig([]), makeDispatch());
 		expect(el.querySelector<HTMLElement>(".nexus-column")?.style.alignItems).toBe("flex-start");
 
 		const el2 = host();
-		renderColumn(el2, columnOf(1, { align: "right" }), makeConfig([]), makeDispatch());
+		await renderColumn(el2, columnOf(1, { align: "right" }), makeConfig([]), makeDispatch());
 		expect(el2.querySelector<HTMLElement>(".nexus-column")?.style.alignItems).toBe("flex-end");
 
 		const el3 = host();
-		renderColumn(el3, columnOf(1, { align: "center" }), makeConfig([]), makeDispatch());
+		await renderColumn(el3, columnOf(1, { align: "center" }), makeConfig([]), makeDispatch());
 		expect(el3.querySelector<HTMLElement>(".nexus-column")?.style.alignItems).toBe("center");
 
 		const el4 = host();
-		renderColumn(el4, columnOf(1, { align: "stretch" }), makeConfig([]), makeDispatch());
+		await renderColumn(el4, columnOf(1, { align: "stretch" }), makeConfig([]), makeDispatch());
 		expect(el4.querySelector<HTMLElement>(".nexus-column")?.style.alignItems).not.toBe("stretch");
 	});
 
-	it("renders nothing for an empty column", () => {
+	it("renders nothing for an empty column", async () => {
 		const el = host();
-		renderColumn(el, columnOf(0), makeConfig([]), makeDispatch());
+		await renderColumn(el, columnOf(0), makeConfig([]), makeDispatch());
 		expect(el.querySelector(".nexus-column")).toBeNull();
 	});
 });

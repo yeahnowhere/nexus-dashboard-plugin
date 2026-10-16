@@ -17,7 +17,7 @@ export function renderStatsBar(
 
 	// Snapshot the vault once per render (not per stat) so large vaults
 	// don't get scanned N times. Tags are read lazily and memoized per path.
-	const tFiles = ctx.app.vault.getFiles();
+	const tFiles = ctx.snapshot.files();
 	const files: StatFile[] = tFiles.map((f) => ({
 		path: f.path,
 		extension: f.extension,

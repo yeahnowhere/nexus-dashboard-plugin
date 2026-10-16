@@ -1,6 +1,41 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { parseDueDate, dueStatus, toggleTaskLine } from "../tasks";
+import {
+	parseDueDate,
+	dueStatus,
+	toggleTaskLine,
+	taskCheckboxState,
+	stripTaskCheckbox,
+} from "../tasks";
+
+describe("taskCheckboxState", () => {
+	it("returns the state character of a task line", () => {
+		expect(taskCheckboxState("- [ ] Todo")).toBe(" ");
+		expect(taskCheckboxState("- [x] Done")).toBe("x");
+		expect(taskCheckboxState("* [X] Done")).toBe("X");
+		expect(taskCheckboxState("+ [-] Cancelled")).toBe("-");
+		expect(taskCheckboxState("  - [/] In progress")).toBe("/");
+	});
+
+	it("returns null for non-task lines", () => {
+		expect(taskCheckboxState("Just a paragraph")).toBeNull();
+		expect(taskCheckboxState("- Regular list item")).toBeNull();
+		expect(taskCheckboxState("1. [ ] Numbered")).toBeNull();
+		expect(taskCheckboxState("")).toBeNull();
+	});
+});
+
+describe("stripTaskCheckbox", () => {
+	it("removes the marker and checkbox, leaving the task text", () => {
+		expect(stripTaskCheckbox("- [ ] Ship it")).toBe("Ship it");
+		expect(stripTaskCheckbox("* [x]  Done already")).toBe("Done already");
+		expect(stripTaskCheckbox("  + [-] Cancelled")).toBe("Cancelled");
+	});
+
+	it("returns trimmed text for non-task lines", () => {
+		expect(stripTaskCheckbox("  plain text  ")).toBe("plain text");
+	});
+});
 
 describe("parseDueDate", () => {
 	it("parses the 📅 emoji date format", () => {

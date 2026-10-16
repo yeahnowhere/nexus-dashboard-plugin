@@ -117,7 +117,7 @@ export function buildBookmarkLinks(ctx: RendererContext): LinksConfig | null {
 			title: "Bookmarks",
 			columns: 1,
 			items: linkItems,
-		} as LinksConfig;
+		};
 	} catch {
 		return null;
 	}

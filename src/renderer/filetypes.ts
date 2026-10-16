@@ -45,7 +45,7 @@ export function renderFileTypeChart(
 ): void {
 	const label = config.label || (ctx.settings.showFileTypeChartDivider ? "FILE TYPES" : "");
 
-	const files = filterByPath(ctx.app.vault.getFiles(), config.path);
+	const files = filterByPath(ctx.snapshot.files(), config.path);
 	const total = files.length;
 	if (total === 0) return;
 

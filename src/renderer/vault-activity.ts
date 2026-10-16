@@ -1,4 +1,4 @@
-import { splitCsv } from "../utils";
+import { splitCsv, isWithinPath } from "../utils";
 import type { TFile } from "obsidian";
 import type { VaultActivityConfig } from "../types";
 import type { RendererContext } from "./context";
@@ -12,13 +12,13 @@ export function getFilteredFiles(
 ): TFile[] {
 	const count = config.count ?? defaultCount;
 
-	let files = ctx.app.vault.getMarkdownFiles();
+	let files = ctx.snapshot.markdownFiles();
 
 	if (config.path) {
-		const paths = splitCsv(config.path).map((p) => p.replace(/\/+$/, "").toLowerCase());
+		const paths = splitCsv(config.path).map((p) => p.toLowerCase());
 		files = files.filter((f) => {
 			const pathLower = f.path.toLowerCase();
-			return paths.some((p) => pathLower.startsWith(p + "/") || pathLower === p);
+			return paths.some((p) => isWithinPath(pathLower, p));
 		});
 	}
 
@@ -64,9 +64,8 @@ export function renderVaultActivity(
 	// Compact file list
 	const panelEl = wrapperEl.createDiv({ cls: "nexus-panel" });
 
-	const listEl = panelEl.createDiv({
-		cls: `nexus-vault-activity${opts.vaultActivityShowFade ? " nexus-fade-mask" : ""}`,
-	});
+	const listEl = document.createElement("div");
+	listEl.className = `nexus-vault-activity${opts.vaultActivityShowFade ? " nexus-fade-mask" : ""}`;
 	listEl.style.maxHeight = `${opts.vaultActivityMaxHeight}px`;
 
 	const relativeTime = (mtime: number): string => {
@@ -84,6 +83,8 @@ export function renderVaultActivity(
 		return `${months}mo ago`;
 	};
 
+	// Build the list detached, then attach once: one layout pass for the whole
+	// activity list instead of one per row.
 	for (const file of files) {
 		const row = listEl.createDiv({ cls: "nexus-vault-activity-row" });
 
@@ -101,4 +102,6 @@ export function renderVaultActivity(
 			ctx.app.workspace.openLinkText(file.path, "", false);
 		});
 	}
+
+	panelEl.appendChild(listEl);
 }

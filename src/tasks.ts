@@ -5,6 +5,26 @@ import type { TFile } from "obsidian";
  */
 export type DueStatus = "overdue" | "today" | "upcoming" | "none";
 
+/** Matches a markdown list marker (`-`, `*`, `+`) followed by a task checkbox. */
+const TASK_CHECKBOX_RE = /^\s*[-*+]\s*\[([ xX\-\/])\]\s*/;
+
+/**
+ * State character of a task-list line's checkbox (` `, `x`, `X`, `-`, `/`), or
+ * `null` when the line is not a markdown task item.
+ */
+export function taskCheckboxState(line: string): string | null {
+	const match = line.match(TASK_CHECKBOX_RE);
+	return match ? match[1] : null;
+}
+
+/**
+ * Strip the list marker and checkbox from a task line, returning its text.
+ * Non-task lines are returned trimmed and unchanged.
+ */
+export function stripTaskCheckbox(line: string): string {
+	return line.replace(TASK_CHECKBOX_RE, "").trim();
+}
+
 /**
  * Extract a due date (YYYY-MM-DD) from a raw task line.
  *

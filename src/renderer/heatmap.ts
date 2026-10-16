@@ -103,7 +103,7 @@ export function renderHeatmap(
 		dayCounts.set(key, (dayCounts.get(key) || 0) + 1);
 	}
 
-	for (const file of ctx.app.vault.getMarkdownFiles()) {
+	for (const file of ctx.snapshot.markdownFiles()) {
 		if (loggedPaths.has(file.path)) continue;
 		const key = dateKey(new Date(file.stat.mtime));
 		const pair = `${key}|${file.path}`;
@@ -139,7 +139,10 @@ export function renderHeatmap(
 	const width = HEATMAP_GEOMETRY.dayLabelWidth + gridWidth;
 	const height = HEATMAP_GEOMETRY.monthLabelHeight + 7 * PITCH - HEATMAP_GEOMETRY.gap;
 
-	const svg = heatmapEl.createSvg("svg", {
+	// Build the SVG off-DOM and attach it once: ~150 cells + labels would
+	// otherwise each invalidate layout on the live tree as they are appended.
+	const svgHost = document.createElement("div");
+	const svg = svgHost.createSvg("svg", {
 		cls: "nexus-heatmap-svg",
 		attr: {
 			viewBox: `0 0 ${width} ${height}`,
@@ -189,6 +192,8 @@ export function renderHeatmap(
 			title.textContent = `${key}: ${count} file${count !== 1 ? "s" : ""}`;
 		}
 	}
+
+	heatmapEl.appendChild(svg);
 }
 
 /**

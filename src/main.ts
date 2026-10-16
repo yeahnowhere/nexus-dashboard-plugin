@@ -10,38 +10,134 @@ import {
 } from "obsidian";
 import { NexusSettings, ActivityEvent } from "./types";
 import { DEFAULT_SETTINGS, mergeSettings, deepCloneDefaults } from "./defaults";
-import { hasExtension, ensureExtension } from "./utils";
+import { hasExtension, ensureExtension, parentOf } from "./utils";
+import { CoalescedScheduler } from "./scheduler";
+import { TtlCache } from "./cache";
+import { taskCheckboxState, stripTaskCheckbox } from "./tasks";
 import { NexusSettingTab, clearVaultFoldersCache } from "./settings";
 import { NexusRenderer } from "./renderer/index";
 import { clearInjectedGraphLinks, injectAllGraphLinks } from "./renderer/graph";
 import {
 	STARTUP_RECONCILE_LOOKBACK_MS,
+	TIMELINE_COALESCE_MS,
 	collectModifiedEvents,
 	collectRenameEvents,
 	TimelineFileMeta,
 } from "./timeline";
 
+/** Trailing debounce for the vault graph-link rescan (quiescent edits wait this long). */
+const GRAPH_REFRESH_DEBOUNCE_MS = 1200;
+/** Hard cap so a burst (e.g. startup indexing) can't postpone the rescan indefinitely. */
+const GRAPH_REFRESH_MAX_WAIT_MS = 3000;
+/** Idle-callback timeout so a deferred rescan still runs within this window. */
+const GRAPH_IDLE_TIMEOUT_MS = 2000;
+
+type IdleScheduler = (cb: () => void, opts?: { timeout: number }) => number;
+
+/**
+ * Run `fn` when the browser is idle so heavy vault work yields to user input
+ * (clicks, typing) instead of blocking it. Falls back to a macrotask when the
+ * idle API is unavailable.
+ */
+function runWhenIdle(fn: () => void): void {
+	const schedule = (globalThis as { requestIdleCallback?: IdleScheduler }).requestIdleCallback;
+	if (typeof schedule === "function") {
+		schedule(fn, { timeout: GRAPH_IDLE_TIMEOUT_MS });
+	} else {
+		setTimeout(fn, 0);
+	}
+}
+
 export default class NexusDashboardPlugin extends Plugin {
 	settings: NexusSettings = DEFAULT_SETTINGS;
 	activeRenderers: Set<NexusRenderer> = new Set();
 
-	private saveTimer: ReturnType<typeof setTimeout> | null = null;
-	private taskCheckTimer: ReturnType<typeof setTimeout> | null = null;
-	private propertyCheckTimer: ReturnType<typeof setTimeout> | null = null;
-	private graphRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-	private dashboardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 	private taskCheckQueue: Array<{ file: TFile; editor: Editor }> = [];
 	private propertyCheckQueue: Set<string> = new Set();
 	private taskSnapshot = new Map<string, Map<number, string>>();
 	private propertySnapshot = new Map<string, string>();
-	private recentFiles: { at: number; files: TFile[] } | null = null;
+	private graphDirtyPaths = new Set<string>();
+	private dashboardRefreshFast = false;
+	private recentFilesCache = new TtlCache<TFile[]>(10_000);
 	private fileMtimes = new Map<string, number>();
+	private startupTimer: ReturnType<typeof setTimeout> | null = null;
 	private pluginLoadTime = Date.now();
 	private startupMuted = true;
+	private loaded = true;
+
+	/** Coalesced settings write: earliest requested deadline wins (300 ms save, 1.5 s activity). */
+	private persistScheduler = new CoalescedScheduler({
+		mode: "earliest",
+		delay: 300,
+		run: () => {
+			void this.saveData(this.settings);
+		},
+	});
+
+	/** Coalesced graph rescan: 1.2 s trailing, capped at 3 s, runs when idle. */
+	private graphScheduler = new CoalescedScheduler({
+		mode: "debounce",
+		delay: GRAPH_REFRESH_DEBOUNCE_MS,
+		maxWait: GRAPH_REFRESH_MAX_WAIT_MS,
+		run: () => {
+			if (!this.loaded) return;
+			const changed = [...this.graphDirtyPaths];
+			this.graphDirtyPaths.clear();
+			runWhenIdle(() => {
+				if (!this.loaded) return;
+				void injectAllGraphLinks(this.app, this.settings, changed);
+			});
+		},
+	});
+
+	/** Coalesced dashboard re-render: 200 ms (fast) / 800 ms trailing, capped at 3 s. */
+	private dashboardScheduler = new CoalescedScheduler({
+		mode: "debounce",
+		delay: 800,
+		maxWait: 3000,
+		delayFor: () => (this.dashboardRefreshFast ? 200 : 800),
+		onBeforeRun: () => {
+			this.dashboardRefreshFast = false;
+		},
+		run: () => {
+			if (!this.loaded) return;
+			this.rerenderDashboards();
+		},
+	});
+
+	/** Coalesced editor task-checkbox diff (runs once, 1.2 s after the last edit). */
+	private taskCheckScheduler = new CoalescedScheduler({
+		mode: "lock",
+		delay: 1200,
+		run: () => {
+			if (!this.loaded) return;
+			const queue = this.taskCheckQueue;
+			this.taskCheckQueue = [];
+			for (const { file, editor } of queue) {
+				this.processTaskChanges(file, editor);
+			}
+		},
+	});
+
+	/** Coalesced frontmatter/property change check (runs once, 800 ms after the last change). */
+	private propertyCheckScheduler = new CoalescedScheduler({
+		mode: "lock",
+		delay: 800,
+		run: () => {
+			if (!this.loaded) return;
+			const queue = [...this.propertyCheckQueue];
+			this.propertyCheckQueue.clear();
+			for (const path of queue) {
+				this.processPropertyChange(path);
+			}
+		},
+	});
 
 	async onload() {
 		this.pluginLoadTime = Date.now();
-		setTimeout(() => {
+		this.startupTimer = setTimeout(() => {
+			this.startupTimer = null;
+			if (!this.loaded) return;
 			this.startupMuted = false;
 			this.reconcileStartupChanges();
 		}, 5000);
@@ -147,17 +243,43 @@ export default class NexusDashboardPlugin extends Plugin {
 		// ── Synthetic graph links ───────────────────────────
 		// Inject dashboard → MOC → card edges into the metadata link cache at
 		// load (and on vault changes) so Graph View shows the relationships
-		// even before any dashboard file is opened.
+		// even before any dashboard file is opened. A single coalesced scan
+		// covers both the startup pass and later edits — no separate timer.
 		this.app.workspace.onLayoutReady(() => {
-			setTimeout(() => {
-				void injectAllGraphLinks(this.app, this.settings);
-			}, 3000);
+			if (!this.loaded) return;
+			this.scheduleGraphRefresh();
 		});
-		this.registerEvent(this.app.vault.on("create", () => this.scheduleGraphRefresh()));
-		this.registerEvent(this.app.vault.on("modify", () => this.scheduleGraphRefresh()));
-		this.registerEvent(this.app.vault.on("delete", () => this.scheduleGraphRefresh()));
-		this.registerEvent(this.app.vault.on("rename", () => this.scheduleGraphRefresh()));
-		this.registerEvent(this.app.metadataCache.on("changed", () => this.scheduleGraphRefresh()));
+		this.registerEvent(
+			this.app.vault.on("create", (file: TAbstractFile) => {
+				this.graphDirtyPaths.add(file.path);
+				this.scheduleGraphRefresh();
+			}),
+		);
+		this.registerEvent(
+			this.app.vault.on("modify", (file: TAbstractFile) => {
+				this.graphDirtyPaths.add(file.path);
+				this.scheduleGraphRefresh();
+			}),
+		);
+		this.registerEvent(
+			this.app.vault.on("delete", (file: TAbstractFile) => {
+				this.graphDirtyPaths.add(file.path);
+				this.scheduleGraphRefresh();
+			}),
+		);
+		this.registerEvent(
+			this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
+				this.graphDirtyPaths.add(oldPath);
+				this.graphDirtyPaths.add(file.path);
+				this.scheduleGraphRefresh();
+			}),
+		);
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (file: TFile) => {
+				this.graphDirtyPaths.add(file.path);
+				this.scheduleGraphRefresh();
+			}),
+		);
 
 		// Re-render open dashboards once the metadata cache settles. On a cold
 		// start, a `tasks:` block renders before Obsidian finishes indexing and
@@ -170,20 +292,38 @@ export default class NexusDashboardPlugin extends Plugin {
 		// ── Open on startup ─────────────────────────────────
 		if (this.settings.openOnStartup) {
 			this.app.workspace.onLayoutReady(() => {
+				if (!this.loaded) return;
 				this.openDashboard();
 			});
 		}
 	}
 
 	onunload() {
+		this.loaded = false;
+		if (this.startupTimer) clearTimeout(this.startupTimer);
+		this.persistScheduler.dispose();
+		this.graphScheduler.dispose();
+		this.dashboardScheduler.dispose();
+		this.taskCheckScheduler.dispose();
+		this.propertyCheckScheduler.dispose();
 		// Remove synthetic graph edges so disabling the plugin leaves no phantom links.
 		clearInjectedGraphLinks(this.app);
-		// Flush any pending activity-log write so events aren't lost on quit.
-		if (this.saveTimer) {
-			clearTimeout(this.saveTimer);
-			this.saveTimer = null;
-			void this.saveData(this.settings);
-		}
+		// Flush any pending settings/activity write so events aren't lost on quit.
+		this.flushPendingWrites();
+	}
+
+	/**
+	 * Coalesced settings write. Activity persists (1.5 s) and settings saves
+	 * (300 ms) share one timer; the earliest requested deadline wins so a
+	 * settings save can pull a pending activity write forward.
+	 */
+	private schedulePersist(delay: number): void {
+		this.persistScheduler.schedule(delay);
+	}
+
+	/** Write any queued settings change immediately (unload, explicit flushes). */
+	private flushPendingWrites(): void {
+		this.persistScheduler.flush();
 	}
 
 	// ── Dashboard finder ───────────────────────────────────
@@ -227,28 +367,48 @@ export default class NexusDashboardPlugin extends Plugin {
 		}
 	}
 
+	/**
+	 * Persist settings and refresh consumers, coalesced for rapid callers:
+	 * the write lands within ~300 ms, dashboards re-render on a fast-lane
+	 * (200 ms trailing) schedule, and the graph rescan waits for a quiet
+	 * moment. Individual keystrokes no longer trigger O(vault) work each.
+	 */
 	async saveSettings() {
-		await this.saveData(this.settings);
-		this.rerenderDashboards();
+		this.trimActivityLog();
+		this.schedulePersist(300);
+		this.scheduleDashboardRefresh({ fast: true });
 		this.scheduleGraphRefresh();
 	}
 
-	/** Debounced re-scan of the vault for graph-link injection. */
-	private scheduleGraphRefresh(): void {
-		if (this.graphRefreshTimer) return;
-		this.graphRefreshTimer = setTimeout(() => {
-			this.graphRefreshTimer = null;
-			void injectAllGraphLinks(this.app, this.settings);
-		}, 600);
+	/** Write settings to disk immediately, bypassing the coalesced write. */
+	async flushSettings(): Promise<void> {
+		this.persistScheduler.cancel();
+		await this.saveData(this.settings);
 	}
 
-	/** Debounced re-render of open dashboards after metadata settles. */
-	private scheduleDashboardRefresh(): void {
-		if (this.dashboardRefreshTimer) return;
-		this.dashboardRefreshTimer = setTimeout(() => {
-			this.dashboardRefreshTimer = null;
-			this.rerenderDashboards();
-		}, 800);
+	/**
+	 * Coalesced re-scan of the vault for graph-link injection. Trailing, so
+	 * continuous editing doesn't rescan between keystrokes, but capped by a
+	 * max-wait so a burst such as startup indexing can't push the scan onto the
+	 * user's first interaction. Only the paths reported since the last scan are
+	 * re-read (the first scan is always full), and the scan runs when the
+	 * browser is idle so it never blocks a click.
+	 */
+	private scheduleGraphRefresh(): void {
+		if (!this.loaded) return;
+		this.graphScheduler.schedule();
+	}
+
+	/**
+	 * Coalesced re-render of every open dashboard. All refresh causes funnel
+	 * here so one burst of vault/settings events produces exactly one rebuild:
+	 * a 200 ms (fast lane) or 800 ms trailing debounce capped by a 3 s
+	 * max-wait, so continuous events still render at most every 3 s.
+	 */
+	private scheduleDashboardRefresh(opts: { fast?: boolean } = {}): void {
+		if (!this.loaded) return;
+		if (opts.fast) this.dashboardRefreshFast = true;
+		this.dashboardScheduler.schedule();
 	}
 
 	// ── Activity log ───────────────────────────────────────
@@ -258,18 +418,32 @@ export default class NexusDashboardPlugin extends Plugin {
 		if (!this.settings.activityTrackingEnabled) return;
 		// Ignore vault indexing / sync bursts that fire right after load.
 		if (this.startupMuted) return;
-		this.settings.activityLog.unshift({ ...event, time: Date.now() });
-		const max = Math.max(50, this.settings.activityLogMax || 500);
-		if (this.settings.activityLog.length > max) {
-			this.settings.activityLog.length = max;
+		const now = Date.now();
+		const log = this.settings.activityLog;
+		const head = log[0];
+		// Write-time coalescing: an autosave burst on one path collapses into
+		// its newest event (mirrors the 60 s display-time window), so the cap
+		// isn't filled with rows the timeline would hide anyway.
+		if (
+			head !== undefined &&
+			head.action === event.action &&
+			head.path === event.path &&
+			(head.oldPath ?? "") === (event.oldPath ?? "") &&
+			now - head.time < TIMELINE_COALESCE_MS
+		) {
+			log[0] = { ...event, time: now };
+		} else {
+			log.unshift({ ...event, time: now });
 		}
-		this.schedulePersist();
+		this.trimActivityLog();
+		this.schedulePersist(1500);
+		this.scheduleDashboardRefresh();
 	}
 
 	clearActivityLog(): void {
 		this.settings.activityLog = [];
 		void this.saveData(this.settings);
-		this.rerenderDashboards();
+		this.scheduleDashboardRefresh({ fast: true });
 	}
 
 	/**
@@ -314,11 +488,9 @@ export default class NexusDashboardPlugin extends Plugin {
 		);
 		this.settings.activityLog.push(...events);
 		this.settings.activityLog.sort((a, b) => b.time - a.time);
-		const max = Math.max(50, this.settings.activityLogMax || 500);
-		if (this.settings.activityLog.length > max) {
-			this.settings.activityLog.length = max;
-		}
-		this.schedulePersist();
+		this.trimActivityLog();
+		this.schedulePersist(1500);
+		this.scheduleDashboardRefresh();
 	}
 
 	/**
@@ -326,31 +498,31 @@ export default class NexusDashboardPlugin extends Plugin {
 	 * the timeline backfill doesn't re-sort the whole vault on every render.
 	 */
 	getRecentFiles(): TFile[] {
-		if (this.recentFiles && Date.now() - this.recentFiles.at < 10_000) {
-			return this.recentFiles.files;
-		}
-		const files = [...this.app.vault.getFiles()].sort((a, b) => b.stat.mtime - a.stat.mtime);
-		this.recentFiles = { at: Date.now(), files };
-		return files;
+		return this.recentFilesCache.get(() =>
+			[...this.app.vault.getFiles()].sort((a, b) => b.stat.mtime - a.stat.mtime),
+		);
 	}
 
-	private schedulePersist(): void {
-		if (this.saveTimer) return;
-		this.saveTimer = setTimeout(() => {
-			this.saveTimer = null;
-			void this.saveData(this.settings);
-			this.rerenderDashboards();
-		}, 1500);
+	/** Clamp the activity log to the configured cap (shared by all writers). */
+	private trimActivityLog(): void {
+		const max = Math.max(50, this.settings.activityLogMax || DEFAULT_SETTINGS.activityLogMax);
+		if (this.settings.activityLog.length > max) {
+			this.settings.activityLog.length = max;
+		}
 	}
 
 	// ── Global activity tracking ───────────────────────────
 
+	/**
+	 * Register the vault/editor/metadata listeners that feed the activity log.
+	 * Listeners are always attached and gate on `activityTrackingEnabled` at
+	 * call time, so toggling tracking in settings takes effect immediately
+	 * (no plugin reload needed).
+	 */
 	private registerActivityTracking(): void {
-		if (!this.settings.activityTrackingEnabled) return;
-
 		this.registerEvent(
 			this.app.vault.on("create", (file: TAbstractFile) => {
-				this.recentFiles = null;
+				this.recentFilesCache.invalidate();
 				if (this.isStartupArtifact(file)) return;
 				if (!(file instanceof TFile)) return;
 				const mtime = file.stat?.mtime;
@@ -366,7 +538,7 @@ export default class NexusDashboardPlugin extends Plugin {
 		this.registerEvent(
 			this.app.vault.on("modify", (file: TAbstractFile) => {
 				if (!(file instanceof TFile)) return;
-				this.recentFiles = null;
+				this.recentFilesCache.invalidate();
 				// Only filter genuine startup-indexing modifies (mtime before
 				// load). Real edits have a fresh mtime and must be live.
 				const mtime = file.stat?.mtime;
@@ -378,7 +550,7 @@ export default class NexusDashboardPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on("delete", (file: TAbstractFile) => {
-				this.recentFiles = null;
+				this.recentFilesCache.invalidate();
 				if (file instanceof TFile) {
 					const mtime = this.fileMtimes.get(file.path);
 					this.fileMtimes.delete(file.path);
@@ -395,8 +567,8 @@ export default class NexusDashboardPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
-				this.recentFiles = null;
-				const sameFolder = this.parentOf(oldPath) === this.parentOf(file.path);
+				this.recentFilesCache.invalidate();
+				const sameFolder = parentOf(oldPath) === parentOf(file.path);
 				if (file instanceof TFile) {
 					const m = this.fileMtimes.get(oldPath);
 					if (m !== undefined) this.fileMtimes.set(file.path, m);
@@ -429,6 +601,7 @@ export default class NexusDashboardPlugin extends Plugin {
 			this.app.workspace.on(
 				"editor-change",
 				(editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
+					if (!this.settings.activityTrackingEnabled) return;
 					if (!this.settings.activityTaskTracking) return;
 					const file = info.file;
 					if (!(file instanceof TFile)) return;
@@ -443,6 +616,7 @@ export default class NexusDashboardPlugin extends Plugin {
 		// Frontmatter / property changes (debounced)
 		this.registerEvent(
 			this.app.metadataCache.on("changed", (file: TFile) => {
+				if (!this.settings.activityTrackingEnabled) return;
 				if (this.propertyCheckQueue.has(file.path)) return;
 				this.propertyCheckQueue.add(file.path);
 				this.schedulePropertyCheck();
@@ -451,27 +625,11 @@ export default class NexusDashboardPlugin extends Plugin {
 	}
 
 	private scheduleTaskCheck(): void {
-		if (this.taskCheckTimer) return;
-		this.taskCheckTimer = setTimeout(() => {
-			this.taskCheckTimer = null;
-			const queue = this.taskCheckQueue;
-			this.taskCheckQueue = [];
-			for (const { file, editor } of queue) {
-				this.processTaskChanges(file, editor);
-			}
-		}, 1200);
+		this.taskCheckScheduler.schedule();
 	}
 
 	private schedulePropertyCheck(): void {
-		if (this.propertyCheckTimer) return;
-		this.propertyCheckTimer = setTimeout(() => {
-			this.propertyCheckTimer = null;
-			const queue = [...this.propertyCheckQueue];
-			this.propertyCheckQueue.clear();
-			for (const path of queue) {
-				this.processPropertyChange(path);
-			}
-		}, 800);
+		this.propertyCheckScheduler.schedule();
 	}
 
 	private processTaskChanges(file: TFile, editor: Editor): void {
@@ -479,7 +637,7 @@ export default class NexusDashboardPlugin extends Plugin {
 		const lineCount = editor.lineCount();
 		for (let i = 0; i < lineCount; i++) {
 			const text = editor.getLine(i);
-			if (this.checkboxState(text) !== null) {
+			if (taskCheckboxState(text) !== null) {
 				current.set(i, text);
 			}
 		}
@@ -488,10 +646,10 @@ export default class NexusDashboardPlugin extends Plugin {
 			for (const [line, text] of current) {
 				const oldText = prev.get(line);
 				if (oldText === undefined) continue;
-				const oldState = this.checkboxState(oldText);
-				const newState = this.checkboxState(text);
+				const oldState = taskCheckboxState(oldText);
+				const newState = taskCheckboxState(text);
 				if (oldState !== null && newState !== null && oldState !== newState) {
-					const clean = text.replace(/^\s*[-*+]\s*\[[ xX\-\/]\]\s*/, "");
+					const clean = stripTaskCheckbox(text);
 					this.recordActivity({
 						action: "task",
 						path: file.path,
@@ -501,11 +659,6 @@ export default class NexusDashboardPlugin extends Plugin {
 			}
 		}
 		this.taskSnapshot.set(file.path, current);
-	}
-
-	private checkboxState(text: string): string | null {
-		const m = text.match(/^\s*[-*+]\s*\[([ xX\-\/])\]\s*/);
-		return m ? m[1] : null;
 	}
 
 	private processPropertyChange(path: string): void {
@@ -550,12 +703,6 @@ export default class NexusDashboardPlugin extends Plugin {
 			}
 		}
 		return changed;
-	}
-
-	/** Parent folder path of a vault path ("" for root). */
-	private parentOf(path: string): string {
-		const idx = path.lastIndexOf("/");
-		return idx < 0 ? "" : path.slice(0, idx);
 	}
 
 	/** Earliest of the file's creation/modification times as Obsidian reports them. */
@@ -638,7 +785,7 @@ export default class NexusDashboardPlugin extends Plugin {
 
 	private async updateCodeBlockPaths(oldPath: string, newPath: string): Promise<void> {
 		const ext = oldPath.match(/\.\w{1,10}$/)?.[0] || ".md";
-		const oldPathNoExt = oldPath.replace(new RegExp(ext.replace(".", "\\.") + "$"), "");
+		const oldPathNoExt = oldPath.replace(new RegExp(ext.replace(/\./g, "\\.") + "$"), "");
 
 		const mdFiles = this.app.vault.getMarkdownFiles();
 		for (const file of mdFiles) {
@@ -677,6 +824,6 @@ export default class NexusDashboardPlugin extends Plugin {
 				await this.app.vault.modify(file, updated);
 			}
 		}
-		this.rerenderDashboards();
+		this.scheduleDashboardRefresh({ fast: true });
 	}
 }

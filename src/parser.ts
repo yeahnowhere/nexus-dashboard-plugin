@@ -18,7 +18,13 @@ import {
 	StatMetric,
 	StatScope,
 } from "./types";
-import { ensureExtension as ensureExt, safeParseInt, splitCsv, applyListConfigKV } from "./utils";
+import {
+	ensureExtension as ensureExt,
+	safeParseInt,
+	splitCsv,
+	applyListConfigKV,
+	parseBool,
+} from "./utils";
 
 function finalizeCard(partial: Partial<CardConfig>): CardConfig {
 	return {
@@ -57,38 +63,408 @@ type ParseContext =
 	| "filetypes"
 	| "tasks";
 
+/** Contexts in which a `- type:` line may begin a card. */
+const CARD_CONTEXTS = new Set<ParseContext>([
+	"root",
+	"section",
+	"cards",
+	"column",
+	"row",
+	"section-divider",
+]);
+
+/**
+ * Keywords that open a top-level dashboard section — either a config area
+ * (`header`/`stats`/`graph`) or a renderable content block.
+ */
+export const DASHBOARD_KEYWORDS = [
+	"header",
+	"stats",
+	"graph",
+	"divider",
+	"section",
+	"links",
+	"row",
+	"column",
+	"vault-activity",
+	"filetypes",
+	"heatmap",
+	"timeline",
+	"clock",
+	"tasks",
+] as const;
+
+/**
+ * Content blocks that live in `DashboardConfig.blocks` (i.e. everything except
+ * the `header`/`stats`/`graph` config areas).
+ */
+export const CONTENT_BLOCK_KEYWORDS = [
+	"section",
+	"divider",
+	"links",
+	"row",
+	"column",
+	"vault-activity",
+	"heatmap",
+	"timeline",
+	"clock",
+	"filetypes",
+	"tasks",
+] as const;
+
+/**
+ * Whether a code block declares any renderable content block. Used to decide
+ * between the settings-driven layout and an explicit block list.
+ * @param source - Raw code-block text
+ * @returns `true` if any `CONTENT_BLOCK_KEYWORDS` marker (`section:`, …) is present
+ */
+export function hasBlockMarkers(source: string): boolean {
+	return CONTENT_BLOCK_KEYWORDS.some((keyword) => source.includes(keyword + ":"));
+}
+
+/**
+ * Parse the body of a ```` ```nexus-dashboard ```` code block into a
+ * `DashboardConfig`.
+ *
+ * The grammar is a small YAML-like, indentation-tolerant key/value language:
+ * a line ending in `:` opens a named context (`section:`, `row:`, `heatmap:`, …)
+ * and its `key: value` children configure that block. `- type:` begins a card;
+ * card/block keys are read relative to the current context. Unknown keys are
+ * ignored, and an empty block falls back to {@link buildDefaultConfig}.
+ *
+ * @param raw - Raw text inside the code block (may be empty or whitespace)
+ * @returns A fully-populated `DashboardConfig`; never throws on malformed input
+ */
 export function parseDashboard(raw: string): DashboardConfig {
 	const trimmed = raw.trim();
 	if (!trimmed) {
 		return buildDefaultConfig();
 	}
+	return new DashboardParser().parse(trimmed);
+}
 
-	const config: DashboardConfig = {
+/** A fresh `DashboardConfig` with header/stats/graph areas initialised. */
+function emptyConfig(): DashboardConfig {
+	return {
 		header: { text: "", font: "", color: "", size: 1, enabled: false },
 		stats: { enabled: false, items: [] },
 		blocks: [],
 		graph: { enabled: false, exclude: [] },
 	};
+}
 
-	const lines = trimmed.split("\n");
-	let context: ParseContext = "root";
-	let currentDivider: DividerBlockConfig | null = null;
-	let currentSection: SectionConfig | null = null;
-	let currentCard: Partial<CardConfig> | null = null;
-	let currentLinks: LinksConfig | null = null;
-	let currentLinkItem: Partial<LinkItem> | null = null;
-	let currentStatItem: Partial<StatItem> | null = null;
-	let currentRow: RowConfig | null = null;
-	let currentRowSectionsRemaining: number = 0;
-	let currentColumn: ColumnConfig | null = null;
-	let columnInsideRow = false;
-	let columnIndent = -1;
-	let currentVaultActivity: VaultActivityConfig | null = null;
-	let currentHeatmap: HeatmapConfig | null = null;
-	let currentTimeline: TimelineConfig | null = null;
-	let currentClock: ClockConfig | null = null;
-	let currentFileTypeChart: FileTypeChartConfig | null = null;
-	let currentTaskSummary: TaskSummaryConfig | null = null;
+/**
+ * Stateful line-by-line parser for dashboard code blocks. Instantiated fresh per
+ * {@link parseDashboard} call so no state leaks between parses.
+ */
+class DashboardParser {
+	private config: DashboardConfig = emptyConfig();
+	private context: ParseContext = "root";
+	private currentDivider: DividerBlockConfig | null = null;
+	private currentSection: SectionConfig | null = null;
+	private currentCard: Partial<CardConfig> | null = null;
+	private currentLinks: LinksConfig | null = null;
+	private currentLinkItem: Partial<LinkItem> | null = null;
+	private currentStatItem: Partial<StatItem> | null = null;
+	private currentRow: RowConfig | null = null;
+	private currentRowSectionsRemaining = 0;
+	private currentColumn: ColumnConfig | null = null;
+	private columnInsideRow = false;
+	private columnIndent = -1;
+	private currentVaultActivity: VaultActivityConfig | null = null;
+	private currentHeatmap: HeatmapConfig | null = null;
+	private currentTimeline: TimelineConfig | null = null;
+	private currentClock: ClockConfig | null = null;
+	private currentFileTypeChart: FileTypeChartConfig | null = null;
+	private currentTaskSummary: TaskSummaryConfig | null = null;
+
+	parse(trimmed: string): DashboardConfig {
+		const lines = trimmed.split("\n");
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i].replace(/\r$/, "");
+			const indent = line.search(/\S/);
+			let t = line.trim();
+			if (!t || t.startsWith("#")) continue;
+
+			// Strip YAML list prefix for known keywords (e.g. "- section:" → "section:")
+			if (t.startsWith("- ")) {
+				const stripped = t.slice(2);
+				if (DASHBOARD_KEYWORDS.some((keyword) => stripped.startsWith(keyword + ":"))) {
+					t = stripped;
+				}
+			}
+
+			this.handleLine(t, indent);
+		}
+
+		// Flush trailing block
+		this.flushCurrent();
+		this.flushColumn();
+		this.flushRow();
+
+		return this.config;
+	}
+
+	/** Dispatch a single trimmed, non-empty, non-comment line. */
+	private handleLine(t: string, indent: number): void {
+		if (this.handleStructuralDirective(t, indent)) return;
+		if (this.handleLeafDirective(t)) return;
+		if (this.handleEntryDirective(t)) return;
+
+		// ── Key-value parsing ─────────────────────────────
+		const kv = splitKV(t);
+		if (!kv) return;
+		this.applyKV(kv);
+	}
+
+	/** Context-switching directives (header/stats/graph/divider/section/row/column). */
+	private handleStructuralDirective(t: string, indent: number): boolean {
+		if (t === "header:") {
+			this.flushCurrent();
+			this.flushColumn();
+			this.context = "header";
+			return true;
+		}
+		if (t.startsWith("stats:") && t.length > 6) {
+			this.flushCurrent();
+			this.flushColumn();
+			const val = t.slice(6).trim();
+			this.config.stats.enabled = parseBool(val);
+			this.context = "stats";
+			return true;
+		}
+		if (t === "stats:") {
+			this.flushCurrent();
+			this.flushColumn();
+			this.context = "stats";
+			return true;
+		}
+		if (t === "graph:") {
+			this.flushCurrent();
+			this.flushColumn();
+			this.context = "graph";
+			return true;
+		}
+		if (t === "divider:") {
+			if (this.context === "section" || this.context === "cards") {
+				if (this.currentSection && this.currentSection.divider) {
+					// Already has a divider — flush section first, create standalone divider
+					this.flushCurrent();
+					this.flushColumn();
+					this.context = "divider";
+					this.currentDivider = { kind: "divider", title: "", type: undefined };
+					return true;
+				}
+				// First divider for this section — attach it
+				if (this.currentSection) {
+					this.currentSection.divider = { kind: "divider", title: "", type: undefined };
+				}
+				this.context = "section-divider";
+				return true;
+			}
+			this.flushCurrent();
+			this.flushColumn();
+			this.context = "divider";
+			this.currentDivider = { kind: "divider", title: "", type: undefined };
+			return true;
+		}
+
+		// ── Section inside column (before root section:) ───
+		if (t === "section:" && this.context === "column") {
+			this.flushCard();
+			this.currentSection = { kind: "section", columns: 2, cards: [] };
+			this.context = "section";
+			return true;
+		}
+
+		// ── Row inside column (nested, before root row:) ───
+		if (t === "row:" && this.context === "column") {
+			this.flushCard();
+			this.flushSection();
+			this.context = "row";
+			this.currentRow = { kind: "row", children: [] };
+			this.currentRowSectionsRemaining = 2;
+			return true;
+		}
+
+		if (t === "section:") {
+			// If a divider was just defined (context === "divider"), attach it to this section
+			// instead of flushing it as a standalone divider
+			const pendingDivider =
+				this.context === "divider" && this.currentDivider ? this.currentDivider : null;
+			if (pendingDivider) {
+				this.currentDivider = null;
+			}
+			this.flushCurrent();
+			if (
+				this.columnInsideRow &&
+				this.currentRow &&
+				this.currentColumn &&
+				this.currentColumn.children.length > 0 &&
+				indent <= this.columnIndent
+			) {
+				this.flushColumn();
+			}
+			this.context = "section";
+			this.currentSection = { kind: "section", columns: 2, cards: [] };
+			if (pendingDivider) {
+				this.currentSection.divider = pendingDivider;
+			}
+			return true;
+		}
+		if (t === "cards:") {
+			if (this.context !== "section") {
+				this.context = "cards";
+			}
+			return true;
+		}
+
+		// ── Links block ─────────────────────────────────
+		if (t === "links:") {
+			const label = this.takePendingLabel() || this.beginLeafBlock();
+			this.context = "links";
+			this.currentLinks = { kind: "links", items: [] };
+			if (label) {
+				this.currentLinks.title = label;
+			}
+			return true;
+		}
+
+		// ── Row marker ──────────────────────────────────
+		if (t === "row:") {
+			this.flushCurrent();
+			this.flushColumn();
+			this.context = "row";
+			this.currentRow = { kind: "row", children: [] };
+			this.currentRowSectionsRemaining = 2; // default, overridden by columns:
+			return true;
+		}
+
+		// ── Column inside row (nested, before root column:) ───
+		if (t === "column:" && this.context === "row") {
+			this.flushCard();
+			this.flushSection();
+			this.columnInsideRow = true;
+			this.columnIndent = indent;
+			this.currentRowSectionsRemaining--;
+			this.context = "column";
+			this.currentColumn = { kind: "column", children: [] };
+			return true;
+		}
+
+		// ── Column marker ────────────────────────────────
+		if (t === "column:") {
+			this.flushCurrent();
+			this.flushColumn();
+			// If still inside a row (multiple columns in a row), maintain row context
+			if (this.currentRow && this.currentRowSectionsRemaining > 0) {
+				this.columnInsideRow = true;
+				this.columnIndent = indent;
+				this.currentRowSectionsRemaining--;
+			}
+			this.context = "column";
+			this.currentColumn = { kind: "column", children: [] };
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Leaf blocks (links/vault-activity/heatmap/timeline/clock/filetypes/tasks)
+	 * are nestable inside rows/columns. Each starts by flushing any in-progress
+	 * section into its container, then either keeps the open column/row slot
+	 * open (nesting) or closes the current column for a standalone block.
+	 */
+	private handleLeafDirective(t: string): boolean {
+		if (t === "vault-activity:") {
+			const label = this.takePendingLabel() || this.beginLeafBlock();
+			this.context = "vault-activity";
+			this.currentVaultActivity = { kind: "vault-activity", show: true, ...(label ? { label } : {}) };
+			return true;
+		}
+		if (t === "heatmap:") {
+			const label = this.takePendingLabel() || this.beginLeafBlock();
+			this.context = "heatmap";
+			this.currentHeatmap = { kind: "heatmap", show: true, ...(label ? { label } : {}) };
+			return true;
+		}
+		if (t === "timeline:") {
+			const label = this.takePendingLabel() || this.beginLeafBlock();
+			this.context = "timeline";
+			this.currentTimeline = { kind: "timeline", show: true, ...(label ? { label } : {}) };
+			return true;
+		}
+		if (t === "clock:") {
+			const label = this.takePendingLabel() || this.beginLeafBlock();
+			this.context = "clock";
+			this.currentClock = { kind: "clock", show: true, ...(label ? { label } : {}) };
+			return true;
+		}
+		if (t === "filetypes:") {
+			const label = this.takePendingLabel() || this.beginLeafBlock();
+			this.context = "filetypes";
+			this.currentFileTypeChart = { kind: "filetypes", show: true, ...(label ? { label } : {}) };
+			return true;
+		}
+		if (t === "tasks:") {
+			const label = this.takePendingLabel() || this.beginLeafBlock();
+			this.context = "tasks";
+			this.currentTaskSummary = { kind: "tasks", show: true, ...(label ? { label } : {}) };
+			return true;
+		}
+		return false;
+	}
+
+	/** New list-entry directives (card / link item / stat item). */
+	private handleEntryDirective(t: string): boolean {
+		// ── New card entry ────────────────────────────────
+		// Only start a card when the current context can hold cards; a `- type:`
+		// inside e.g. a links/stats/leaf block would otherwise silently switch
+		// the parser into cards mode and hijack the following keys.
+		if (t.startsWith("- type:") && CARD_CONTEXTS.has(this.context)) {
+			this.flushCard();
+			this.currentCard = { type: parseValue(t, "- type:") === "mini" ? "mini" : "big" };
+			this.context = "cards";
+			return true;
+		}
+
+		// ── New link item entry ────────────────────────────
+		if (t.startsWith("- url:") && this.context === "links") {
+			this.flushLinkItem();
+			this.currentLinkItem = { url: parseValue(t, "- url:") };
+			return true;
+		}
+
+		// ── New stats item entry ───────────────────────────
+		if (this.context === "stats" && (t.startsWith("- label:") || t.startsWith("- path:"))) {
+			this.flushStatItem();
+			this.currentStatItem = {};
+			if (t.startsWith("- label:")) {
+				this.currentStatItem.label = parseValue(t, "- label:");
+			} else {
+				this.currentStatItem.folder = parseValue(t, "- path:");
+			}
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Capture a pending divider title that should become a leaf block's label
+	 * (a `divider:` written immediately before the leaf, mirroring the old
+	 * `links:` behavior). Must run before `beginLeafBlock()` so the divider
+	 * isn't flushed to the top level.
+	 */
+	private takePendingLabel(): string | undefined {
+		if (this.context === "divider" && this.currentDivider) {
+			const title = this.currentDivider.title;
+			this.currentDivider = null;
+			return title || undefined;
+		}
+		return undefined;
+	}
 
 	/**
 	 * Prepare the parser for a leaf block (links/vault-activity/heatmap/timeline/
@@ -100,321 +476,70 @@ export function parseDashboard(raw: string): DashboardConfig {
 	 * Returns a divider title carried over from a released empty section, which
 	 * the caller should use as the leaf block's label.
 	 */
-	const beginLeafBlock = (): string | undefined => {
+	private beginLeafBlock(): string | undefined {
 		// A leaf block directly following an empty section marker (e.g.
 		// `- section:\n  vault-activity:`) should take that section's place in the
 		// container instead of leaving an invisible spacer behind it. When the
 		// section carries a divider, carry its title onto the leaf as a label so
 		// the divider isn't lost when the section is released.
 		let carried: string | undefined;
-		if (currentSection && currentSection.cards.length === 0) {
-			if (currentSection.divider?.title) {
-				carried = currentSection.divider.title;
+		if (this.currentSection && this.currentSection.cards.length === 0) {
+			if (this.currentSection.divider?.title) {
+				carried = this.currentSection.divider.title;
 			}
-			currentSection = null;
+			this.currentSection = null;
 		}
-		flushCurrent();
-		if (!currentColumn && !(currentRow && currentRowSectionsRemaining > 0)) {
-			flushColumn();
+		this.flushCurrent();
+		if (!this.currentColumn && !(this.currentRow && this.currentRowSectionsRemaining > 0)) {
+			this.flushColumn();
 		}
 		return carried;
-	};
-
-	/**
-	 * Capture a pending divider title that should become a leaf block's label
-	 * (a `divider:` written immediately before the leaf, mirroring the old
-	 * `links:` behavior). Must run before `beginLeafBlock()` so the divider
-	 * isn't flushed to the top level.
-	 */
-	const takePendingLabel = (): string | undefined => {
-		if (context === "divider" && currentDivider) {
-			const title = currentDivider.title;
-			currentDivider = null;
-			return title || undefined;
-		}
-		return undefined;
-	};
+	}
 
 	/** Create the new-note config object on first mention of any `new-note` key. */
-	const ensureStatsNewNote = (): NonNullable<DashboardConfig["stats"]["newNote"]> => {
-		if (!config.stats.newNote) {
-			config.stats.newNote = { enabled: false, label: "+ New Note", folder: "", template: "" };
+	private ensureStatsNewNote(): NonNullable<DashboardConfig["stats"]["newNote"]> {
+		if (!this.config.stats.newNote) {
+			this.config.stats.newNote = { enabled: false, label: "+ New Note", folder: "", template: "" };
 		}
-		return config.stats.newNote;
-	};
+		return this.config.stats.newNote;
+	}
 
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i].replace(/\r$/, "");
-		const indent = line.search(/\S/);
-		let t = line.trim();
-		if (!t || t.startsWith("#")) continue;
-
-		// Strip YAML list prefix for known keywords (e.g. "- section:" → "section:")
-		if (t.startsWith("- ")) {
-			const stripped = t.slice(2);
-			if (
-				/^(header|stats|graph|divider|section|links|row|column|vault-activity|filetypes|heatmap|timeline|clock|tasks):/.test(
-					stripped,
-				)
-			) {
-				t = stripped;
-			}
-		}
-
-		// ── Context switches ──────────────────────────────
-		if (t === "header:") {
-			flushCurrent();
-			flushColumn();
-			context = "header";
-			continue;
-		}
-		if (t.startsWith("stats:") && t.length > 6) {
-			flushCurrent();
-			flushColumn();
-			const val = t.slice(6).trim();
-			config.stats.enabled = val === "true";
-			context = "stats";
-			continue;
-		}
-		if (t === "stats:") {
-			flushCurrent();
-			flushColumn();
-			context = "stats";
-			continue;
-		}
-		if (t === "graph:") {
-			flushCurrent();
-			flushColumn();
-			context = "graph";
-			continue;
-		}
-		if (t === "divider:") {
-			if (context === "section" || context === "cards") {
-				if (currentSection && currentSection.divider) {
-					// Already has a divider — flush section first, create standalone divider
-					flushCurrent();
-					flushColumn();
-					context = "divider";
-					currentDivider = { kind: "divider", title: "", type: undefined };
-					continue;
-				}
-				// First divider for this section — attach it
-				if (currentSection) {
-					currentSection.divider = { kind: "divider", title: "", type: undefined };
-				}
-				context = "section-divider";
-				continue;
-			}
-			flushCurrent();
-			flushColumn();
-			context = "divider";
-			currentDivider = { kind: "divider", title: "", type: undefined };
-			continue;
-		}
-
-		// ── Section inside column (before root section:) ───
-		if (t === "section:" && context === "column") {
-			flushCard();
-			currentSection = { kind: "section", columns: 2, cards: [] };
-			context = "section";
-			continue;
-		}
-
-		// ── Row inside column (nested, before root row:) ───
-		if (t === "row:" && context === "column") {
-			flushCard();
-			flushSection();
-			context = "row";
-			currentRow = { kind: "row", children: [] };
-			currentRowSectionsRemaining = 2;
-			continue;
-		}
-
-		if (t === "section:") {
-			// If a divider was just defined (context === "divider"), attach it to this section
-			// instead of flushing it as a standalone divider
-			const pendingDivider = context === "divider" && currentDivider ? currentDivider : null;
-			if (pendingDivider) {
-				currentDivider = null;
-			}
-			flushCurrent();
-			if (
-				columnInsideRow &&
-				currentRow &&
-				currentColumn &&
-				currentColumn.children.length > 0 &&
-				indent <= columnIndent
-			) {
-				flushColumn();
-			}
-			context = "section";
-			currentSection = { kind: "section", columns: 2, cards: [] };
-			if (pendingDivider) {
-				currentSection.divider = pendingDivider;
-			}
-			continue;
-		}
-		if (t === "cards:") {
-			if (context !== "section") {
-				context = "cards";
-			}
-			continue;
-		}
-
-		// ── Links block ─────────────────────────────────
-		if (t === "links:") {
-			const label = takePendingLabel() || beginLeafBlock();
-			context = "links";
-			currentLinks = { kind: "links", items: [] };
-			if (label) {
-				currentLinks.title = label;
-			}
-			continue;
-		}
-
-		// ── Row marker ──────────────────────────────────
-		if (t === "row:") {
-			flushCurrent();
-			flushColumn();
-			context = "row";
-			currentRow = { kind: "row", children: [] };
-			currentRowSectionsRemaining = 2; // default, overridden by columns:
-			continue;
-		}
-
-		// ── Column inside row (nested, before root column:) ───
-		if (t === "column:" && context === "row") {
-			flushCard();
-			flushSection();
-			columnInsideRow = true;
-			columnIndent = indent;
-			currentRowSectionsRemaining--;
-			context = "column";
-			currentColumn = { kind: "column", children: [] };
-			continue;
-		}
-
-		// ── Column marker ────────────────────────────────
-		if (t === "column:") {
-			flushCurrent();
-			flushColumn();
-			// If still inside a row (multiple columns in a row), maintain row context
-			if (currentRow && currentRowSectionsRemaining > 0) {
-				columnInsideRow = true;
-				columnIndent = indent;
-				currentRowSectionsRemaining--;
-			}
-			context = "column";
-			currentColumn = { kind: "column", children: [] };
-			continue;
-		}
-
-		// ── Leaf blocks (links/vault-activity/heatmap/timeline/clock/filetypes/tasks) ──
-		// are nestable inside rows/columns. Each starts by flushing any in-progress
-		// section into its container, then either keeps the open column/row slot
-		// open (nesting) or closes the current column for a standalone block.
-		if (t === "vault-activity:") {
-			const label = takePendingLabel() || beginLeafBlock();
-			context = "vault-activity";
-			currentVaultActivity = { kind: "vault-activity", show: true, ...(label ? { label } : {}) };
-			continue;
-		}
-		if (t === "heatmap:") {
-			const label = takePendingLabel() || beginLeafBlock();
-			context = "heatmap";
-			currentHeatmap = { kind: "heatmap", show: true, ...(label ? { label } : {}) };
-			continue;
-		}
-		if (t === "timeline:") {
-			const label = takePendingLabel() || beginLeafBlock();
-			context = "timeline";
-			currentTimeline = { kind: "timeline", show: true, ...(label ? { label } : {}) };
-			continue;
-		}
-		if (t === "clock:") {
-			const label = takePendingLabel() || beginLeafBlock();
-			context = "clock";
-			currentClock = { kind: "clock", show: true, ...(label ? { label } : {}) };
-			continue;
-		}
-		if (t === "filetypes:") {
-			const label = takePendingLabel() || beginLeafBlock();
-			context = "filetypes";
-			currentFileTypeChart = { kind: "filetypes", show: true, ...(label ? { label } : {}) };
-			continue;
-		}
-		if (t === "tasks:") {
-			const label = takePendingLabel() || beginLeafBlock();
-			context = "tasks";
-			currentTaskSummary = { kind: "tasks", show: true, ...(label ? { label } : {}) };
-			continue;
-		}
-
-		// ── New card entry ────────────────────────────────
-		if (t.startsWith("- type:")) {
-			flushCard();
-			currentCard = { type: parseValue(t, "- type:") === "mini" ? "mini" : "big" };
-			context = "cards";
-			continue;
-		}
-
-		// ── New link item entry ────────────────────────────
-		if (t.startsWith("- url:") && context === "links") {
-			flushLinkItem();
-			currentLinkItem = { url: parseValue(t, "- url:") };
-			continue;
-		}
-
-		// ── New stats item entry ───────────────────────────
-		if (context === "stats" && (t.startsWith("- label:") || t.startsWith("- path:"))) {
-			flushStatItem();
-			currentStatItem = {};
-			if (t.startsWith("- label:")) {
-				currentStatItem.label = parseValue(t, "- label:");
-			} else {
-				currentStatItem.folder = parseValue(t, "- path:");
-			}
-			continue;
-		}
-
-		// ── Key-value parsing ─────────────────────────────
-		const kv = splitKV(t);
-		if (!kv) continue;
-
-		// Root-level keys recognized in ANY context
-		switch (context) {
+	/** Apply a `key: value` pair to the block selected by the current context. */
+	private applyKV(kv: { key: string; value: string }): void {
+		switch (this.context) {
 			case "header":
-				if (!config.header.enabled) {
-					config.header = { text: "", font: "", color: "", size: 1, enabled: true };
+				if (!this.config.header.enabled) {
+					this.config.header = { text: "", font: "", color: "", size: 1, enabled: true };
 				}
 				if (kv.key === "size") {
 					if (kv.value === "small") {
-						config.header.size = 0.6;
+						this.config.header.size = 0.6;
 					} else if (kv.value === "normal") {
-						config.header.size = 1;
+						this.config.header.size = 1;
 					} else {
 						const n = Number(kv.value);
-						config.header.size = Number.isFinite(n) && n > 0 ? n : 1;
+						this.config.header.size = Number.isFinite(n) && n > 0 ? n : 1;
 					}
 				} else if (kv.key === "mobileSize") {
 					const n = Number(kv.value);
-					config.header.mobileSize = Number.isFinite(n) && n > 0 ? n : undefined;
+					this.config.header.mobileSize = Number.isFinite(n) && n > 0 ? n : undefined;
 				} else if (kv.key === "text" || kv.key === "font" || kv.key === "color" || kv.key === "align") {
-					(config.header as unknown as Record<string, string | number | boolean | undefined>)[kv.key] =
-						kv.value;
+					(this.config.header as unknown as Record<string, string | number | boolean | undefined>)[
+						kv.key
+					] = kv.value;
 				}
 				break;
 			case "stats":
 				if (kv.key === "show") {
-					config.stats.enabled = kv.value === "true";
+					this.config.stats.enabled = parseBool(kv.value);
 				} else if (kv.key === "new-note") {
-					ensureStatsNewNote().enabled = kv.value === "true";
+					this.ensureStatsNewNote().enabled = parseBool(kv.value);
 				} else if (kv.key === "new-note-folder") {
-					ensureStatsNewNote().folder = kv.value;
+					this.ensureStatsNewNote().folder = kv.value;
 				} else if (kv.key === "new-note-template") {
-					ensureStatsNewNote().template = kv.value;
+					this.ensureStatsNewNote().template = kv.value;
 				} else if (kv.key === "new-note-label") {
-					ensureStatsNewNote().label = kv.value;
+					this.ensureStatsNewNote().label = kv.value;
 				} else if (
 					kv.key === "label" ||
 					kv.key === "path" ||
@@ -423,85 +548,85 @@ export function parseDashboard(raw: string): DashboardConfig {
 					kv.key === "scope" ||
 					kv.key === "recursive"
 				) {
-					if (!currentStatItem) currentStatItem = {};
+					if (!this.currentStatItem) this.currentStatItem = {};
 					if (kv.key === "label") {
-						currentStatItem.label = kv.value;
+						this.currentStatItem.label = kv.value;
 					} else if (kv.key === "path" || kv.key === "folder") {
-						currentStatItem.folder = kv.value;
+						this.currentStatItem.folder = kv.value;
 					} else if (kv.key === "metric") {
-						currentStatItem.metric = kv.value as StatMetric;
+						this.currentStatItem.metric = kv.value as StatMetric;
 					} else if (kv.key === "scope") {
-						currentStatItem.scope = kv.value as StatScope;
+						this.currentStatItem.scope = kv.value as StatScope;
 					} else if (kv.key === "recursive") {
-						currentStatItem.recursive = kv.value === "true";
+						this.currentStatItem.recursive = parseBool(kv.value);
 					}
 				}
 				break;
 			case "divider":
-				if (currentDivider) applyDividerKV(currentDivider, kv);
+				if (this.currentDivider) applyDividerKV(this.currentDivider, kv);
 				break;
 			case "section-divider":
 				if (kv.key === "title" || kv.key === "type") {
-					if (currentSection?.divider) applyDividerKV(currentSection.divider, kv);
+					if (this.currentSection?.divider) applyDividerKV(this.currentSection.divider, kv);
 				} else {
 					// Not a divider key — revert to section context
-					context = "section";
-					if (currentSection) applySectionKV(currentSection, kv);
+					this.context = "section";
+					if (this.currentSection) applySectionKV(this.currentSection, kv);
 				}
 				break;
 			case "section":
-				if (currentSection) applySectionKV(currentSection, kv);
+				if (this.currentSection) applySectionKV(this.currentSection, kv);
 				break;
 			case "cards":
-				if (currentCard) applyCardKV(currentCard, kv);
+				if (this.currentCard) applyCardKV(this.currentCard, kv);
 				break;
 			case "graph":
 				if (kv.key === "exclude") {
-					config.graph.exclude = splitCsv(kv.value);
+					this.config.graph.exclude = splitCsv(kv.value);
 				} else if (kv.key === "showGraph") {
-					config.graph.enabled = kv.value === "true";
+					this.config.graph.enabled = parseBool(kv.value);
 				}
 				break;
 			case "links":
-				if (currentLinkItem) {
-					applyLinkItemKV(currentLinkItem, kv);
-				} else if (currentLinks) {
-					applyLinksKV(currentLinks, kv);
+				if (this.currentLinkItem) {
+					applyLinkItemKV(this.currentLinkItem, kv);
+				} else if (this.currentLinks) {
+					applyLinksKV(this.currentLinks, kv);
 				}
 				break;
 			case "row":
-				if (currentRow) {
-					applyRowKV(currentRow, kv);
+				if (this.currentRow) {
+					applyRowKV(this.currentRow, kv);
 					if (kv.key === "columns") {
-						currentRowSectionsRemaining = safeParseInt(kv.value, 2, 1, 4) ?? 2;
+						this.currentRowSectionsRemaining = safeParseInt(kv.value, 2, 1, 4) ?? 2;
 					}
 				}
 				break;
 			case "column":
-				if (currentColumn) {
-					if (kv.key === "spacing") currentColumn.spacing = kv.value;
+				if (this.currentColumn) {
+					if (kv.key === "spacing") this.currentColumn.spacing = kv.value;
 					if (kv.key === "align")
-						currentColumn.align = kv.value as "left" | "center" | "right" | "stretch";
+						this.currentColumn.align = kv.value as "left" | "center" | "right" | "stretch";
 				}
 				break;
 			case "heatmap":
-				if (currentHeatmap) applyHeatmapKV(currentHeatmap, kv);
+				if (this.currentHeatmap) applyHeatmapKV(this.currentHeatmap, kv);
 				break;
 			case "timeline":
-				if (currentTimeline) applyTimelineKV(currentTimeline, kv);
+				if (this.currentTimeline) applyTimelineKV(this.currentTimeline, kv);
 				break;
 			case "clock":
-				if (currentClock) applyClockKV(currentClock, kv);
+				if (this.currentClock) applyClockKV(this.currentClock, kv);
 				break;
 			case "filetypes":
-				if (currentFileTypeChart) applyFileTypeChartKV(currentFileTypeChart, kv);
+				if (this.currentFileTypeChart) applyFileTypeChartKV(this.currentFileTypeChart, kv);
 				break;
 			case "tasks":
-				if (currentTaskSummary) applyTaskSummaryKV(currentTaskSummary, kv);
+				if (this.currentTaskSummary) applyTaskSummaryKV(this.currentTaskSummary, kv);
 				break;
 			case "vault-activity":
-				if (currentVaultActivity) {
-					applyListConfigKV(currentVaultActivity, kv, {
+				if (this.currentVaultActivity) {
+					applyListConfigKV(this.currentVaultActivity, kv, {
 						label: (val, t) => {
 							(t as VaultActivityConfig).label = val;
 						},
@@ -511,15 +636,8 @@ export function parseDashboard(raw: string): DashboardConfig {
 		}
 	}
 
-	// Flush trailing block
-	flushCurrent();
-	flushColumn();
-	flushRow();
-
-	return config;
-
 	/** Route a flushed block into the open container (column → row slot → top level). */
-	function pushBlock(
+	private pushBlock(
 		block:
 			| LinksConfig
 			| VaultActivityConfig
@@ -529,187 +647,187 @@ export function parseDashboard(raw: string): DashboardConfig {
 			| FileTypeChartConfig
 			| TaskSummaryConfig,
 	): void {
-		if (currentColumn) {
-			currentColumn.children.push(block);
+		if (this.currentColumn) {
+			this.currentColumn.children.push(block);
 			return;
 		}
-		if (currentRow && currentRowSectionsRemaining > 0) {
-			currentRow.children.push(block);
-			currentRowSectionsRemaining--;
-			if (currentRowSectionsRemaining === 0) {
-				flushRow();
+		if (this.currentRow && this.currentRowSectionsRemaining > 0) {
+			this.currentRow.children.push(block);
+			this.currentRowSectionsRemaining--;
+			if (this.currentRowSectionsRemaining === 0) {
+				this.flushRow();
 			}
 			return;
 		}
-		config.blocks.push(block);
+		this.config.blocks.push(block);
 	}
 
-	function flushCurrent() {
-		flushCard();
-		flushLinkItem();
-		flushStatItem();
-		flushLinks();
-		flushSection();
-		flushDivider();
-		flushVaultActivity();
-		flushHeatmap();
-		flushTimeline();
-		flushClock();
-		flushFileTypeChart();
-		flushTaskSummary();
+	private flushCurrent(): void {
+		this.flushCard();
+		this.flushLinkItem();
+		this.flushStatItem();
+		this.flushLinks();
+		this.flushSection();
+		this.flushDivider();
+		this.flushVaultActivity();
+		this.flushHeatmap();
+		this.flushTimeline();
+		this.flushClock();
+		this.flushFileTypeChart();
+		this.flushTaskSummary();
 	}
 
-	function flushCard() {
-		if (currentSection && currentCard) {
-			currentSection.cards.push(finalizeCard(currentCard));
-			currentCard = null;
+	private flushCard(): void {
+		if (this.currentSection && this.currentCard) {
+			this.currentSection.cards.push(finalizeCard(this.currentCard));
+			this.currentCard = null;
 		}
 	}
 
-	function flushLinkItem() {
-		if (currentLinks && currentLinkItem) {
-			if (currentLinkItem.url) {
-				currentLinks.items.push(finalizeLinkItem(currentLinkItem));
+	private flushLinkItem(): void {
+		if (this.currentLinks && this.currentLinkItem) {
+			if (this.currentLinkItem.url) {
+				this.currentLinks.items.push(finalizeLinkItem(this.currentLinkItem));
 			}
-			currentLinkItem = null;
+			this.currentLinkItem = null;
 		}
 	}
 
-	function flushStatItem() {
-		if (currentStatItem) {
-			if (currentStatItem.label || currentStatItem.folder) {
-				config.stats.items.push(currentStatItem as StatItem);
+	private flushStatItem(): void {
+		if (this.currentStatItem) {
+			if (this.currentStatItem.label || this.currentStatItem.folder) {
+				this.config.stats.items.push(this.currentStatItem as StatItem);
 			}
-			currentStatItem = null;
+			this.currentStatItem = null;
 		}
 	}
 
-	function flushLinks() {
-		flushLinkItem();
-		if (currentLinks) {
-			pushBlock(currentLinks);
-			currentLinks = null;
+	private flushLinks(): void {
+		this.flushLinkItem();
+		if (this.currentLinks) {
+			this.pushBlock(this.currentLinks);
+			this.currentLinks = null;
 		}
 	}
 
-	function flushSection() {
-		flushCard();
-		if (currentSection) {
-			if (currentColumn) {
-				currentColumn.children.push(currentSection);
-			} else if (currentRow && currentRowSectionsRemaining > 0) {
-				currentRow.children.push(currentSection);
-				currentRowSectionsRemaining--;
-				if (currentRowSectionsRemaining === 0) {
-					flushRow();
+	private flushSection(): void {
+		this.flushCard();
+		if (this.currentSection) {
+			if (this.currentColumn) {
+				this.currentColumn.children.push(this.currentSection);
+			} else if (this.currentRow && this.currentRowSectionsRemaining > 0) {
+				this.currentRow.children.push(this.currentSection);
+				this.currentRowSectionsRemaining--;
+				if (this.currentRowSectionsRemaining === 0) {
+					this.flushRow();
 				}
 			} else {
-				config.blocks.push(currentSection);
+				this.config.blocks.push(this.currentSection);
 			}
-			currentSection = null;
-		} else if (currentCard) {
+			this.currentSection = null;
+		} else if (this.currentCard) {
 			const implicitSection: SectionConfig = {
 				kind: "section",
 				columns: 2,
-				cards: [finalizeCard(currentCard)],
+				cards: [finalizeCard(this.currentCard)],
 			};
-			if (currentColumn) {
-				currentColumn.children.push(implicitSection);
-			} else if (currentRow && currentRowSectionsRemaining > 0) {
-				currentRow.children.push(implicitSection);
-				currentRowSectionsRemaining--;
-				if (currentRowSectionsRemaining === 0) {
-					flushRow();
+			if (this.currentColumn) {
+				this.currentColumn.children.push(implicitSection);
+			} else if (this.currentRow && this.currentRowSectionsRemaining > 0) {
+				this.currentRow.children.push(implicitSection);
+				this.currentRowSectionsRemaining--;
+				if (this.currentRowSectionsRemaining === 0) {
+					this.flushRow();
 				}
 			} else {
-				config.blocks.push(implicitSection);
+				this.config.blocks.push(implicitSection);
 			}
-			currentCard = null;
+			this.currentCard = null;
 		}
 	}
 
-	function flushDivider() {
-		if (currentDivider) {
-			config.blocks.push(currentDivider);
-			currentDivider = null;
+	private flushDivider(): void {
+		if (this.currentDivider) {
+			this.config.blocks.push(this.currentDivider);
+			this.currentDivider = null;
 		}
 	}
 
-	function flushRow() {
-		if (currentRow) {
-			if (currentRow.children.length > 0) {
-				if (currentColumn) {
-					currentColumn.children.push(currentRow);
+	private flushRow(): void {
+		if (this.currentRow) {
+			if (this.currentRow.children.length > 0) {
+				if (this.currentColumn) {
+					this.currentColumn.children.push(this.currentRow);
 				} else {
-					config.blocks.push(currentRow);
+					this.config.blocks.push(this.currentRow);
 				}
 			}
-			currentRow = null;
-			currentRowSectionsRemaining = 0;
+			this.currentRow = null;
+			this.currentRowSectionsRemaining = 0;
 		}
 	}
 
-	function flushColumn() {
-		if (currentColumn) {
-			flushSection();
-			if (currentColumn.children.length > 0) {
-				if (columnInsideRow && currentRow) {
-					currentRow.children.push(currentColumn);
-					currentColumn = null;
-					if (currentRowSectionsRemaining === 0) {
-						flushRow();
+	private flushColumn(): void {
+		if (this.currentColumn) {
+			this.flushSection();
+			if (this.currentColumn.children.length > 0) {
+				if (this.columnInsideRow && this.currentRow) {
+					this.currentRow.children.push(this.currentColumn);
+					this.currentColumn = null;
+					if (this.currentRowSectionsRemaining === 0) {
+						this.flushRow();
 					}
 				} else {
-					config.blocks.push(currentColumn);
+					this.config.blocks.push(this.currentColumn);
 				}
 			}
-			if (currentColumn) {
-				currentColumn = null;
-				columnInsideRow = false;
-				columnIndent = -1;
+			if (this.currentColumn) {
+				this.currentColumn = null;
+				this.columnInsideRow = false;
+				this.columnIndent = -1;
 			}
 		}
 	}
 
-	function flushVaultActivity() {
-		if (currentVaultActivity) {
-			pushBlock(currentVaultActivity);
-			currentVaultActivity = null;
+	private flushVaultActivity(): void {
+		if (this.currentVaultActivity) {
+			this.pushBlock(this.currentVaultActivity);
+			this.currentVaultActivity = null;
 		}
 	}
 
-	function flushHeatmap() {
-		if (currentHeatmap) {
-			pushBlock(currentHeatmap);
-			currentHeatmap = null;
+	private flushHeatmap(): void {
+		if (this.currentHeatmap) {
+			this.pushBlock(this.currentHeatmap);
+			this.currentHeatmap = null;
 		}
 	}
 
-	function flushTimeline() {
-		if (currentTimeline) {
-			pushBlock(currentTimeline);
-			currentTimeline = null;
+	private flushTimeline(): void {
+		if (this.currentTimeline) {
+			this.pushBlock(this.currentTimeline);
+			this.currentTimeline = null;
 		}
 	}
 
-	function flushClock() {
-		if (currentClock) {
-			pushBlock(currentClock);
-			currentClock = null;
+	private flushClock(): void {
+		if (this.currentClock) {
+			this.pushBlock(this.currentClock);
+			this.currentClock = null;
 		}
 	}
 
-	function flushFileTypeChart() {
-		if (currentFileTypeChart) {
-			pushBlock(currentFileTypeChart);
-			currentFileTypeChart = null;
+	private flushFileTypeChart(): void {
+		if (this.currentFileTypeChart) {
+			this.pushBlock(this.currentFileTypeChart);
+			this.currentFileTypeChart = null;
 		}
 	}
 
-	function flushTaskSummary() {
-		if (currentTaskSummary) {
-			pushBlock(currentTaskSummary);
-			currentTaskSummary = null;
+	private flushTaskSummary(): void {
+		if (this.currentTaskSummary) {
+			this.pushBlock(this.currentTaskSummary);
+			this.currentTaskSummary = null;
 		}
 	}
 }
@@ -760,16 +878,15 @@ function applyRowKV(row: RowConfig, kv: { key: string; value: string }) {
 // applyListConfigKV (from utils) handles vault-activity show/count/path/tags
 
 function applyHeatmapKV(heatmap: HeatmapConfig, kv: { key: string; value: string }) {
-	if (kv.key === "show") heatmap.show = kv.value === "true";
+	if (kv.key === "show") heatmap.show = parseBool(kv.value);
 	if (kv.key === "weeks") {
-		const n = parseInt(kv.value, 10);
-		heatmap.weeks = Number.isFinite(n) && n > 0 ? n : undefined;
+		heatmap.weeks = safeParseInt(kv.value, undefined, 1);
 	}
 	if (kv.key === "label") heatmap.label = kv.value;
 }
 
 function applyTimelineKV(timeline: TimelineConfig, kv: { key: string; value: string }) {
-	if (kv.key === "show") timeline.show = kv.value === "true";
+	if (kv.key === "show") timeline.show = parseBool(kv.value);
 	if (kv.key === "label") timeline.label = kv.value;
 	if (kv.key === "exclude") {
 		timeline.exclude = splitCsv(kv.value);
@@ -783,42 +900,40 @@ function applyTimelineKV(timeline: TimelineConfig, kv: { key: string; value: str
 	if (kv.key === "types") {
 		timeline.types = splitCsv(kv.value);
 	}
-	if (kv.key === "onlyMarkdown") timeline.onlyMarkdown = kv.value === "true";
+	if (kv.key === "onlyMarkdown") timeline.onlyMarkdown = parseBool(kv.value);
 	if (kv.key === "group") {
 		timeline.group = kv.value === "file" ? "file" : "day";
 	}
-	if (kv.key === "relative") timeline.relative = kv.value === "true";
-	if (kv.key === "showDate") timeline.showDate = kv.value === "true";
+	if (kv.key === "relative") timeline.relative = parseBool(kv.value);
+	if (kv.key === "showDate") timeline.showDate = parseBool(kv.value);
 }
 
 function applyClockKV(clock: ClockConfig, kv: { key: string; value: string }) {
-	if (kv.key === "show") clock.show = kv.value === "true";
+	if (kv.key === "show") clock.show = parseBool(kv.value);
 	if (kv.key === "timezone") clock.timezone = kv.value;
-	if (kv.key === "showDate") clock.showDate = kv.value === "true";
-	if (kv.key === "showSeconds") clock.showSeconds = kv.value === "true";
+	if (kv.key === "showDate") clock.showDate = parseBool(kv.value);
+	if (kv.key === "showSeconds") clock.showSeconds = parseBool(kv.value);
 	if (kv.key === "format") clock.format = kv.value as "12h" | "24h";
 	if (kv.key === "label") clock.label = kv.value;
 }
 
 function applyFileTypeChartKV(chart: FileTypeChartConfig, kv: { key: string; value: string }) {
-	if (kv.key === "show") chart.show = kv.value === "true";
+	if (kv.key === "show") chart.show = parseBool(kv.value);
 	if (kv.key === "label") chart.label = kv.value;
 	if (kv.key === "path") chart.path = kv.value;
 	if (kv.key === "height") {
-		const n = parseInt(kv.value, 10);
-		chart.maxLegendHeight = Number.isFinite(n) && n > 0 ? n : undefined;
+		chart.maxLegendHeight = safeParseInt(kv.value, undefined, 1);
 	}
 }
 
 function applyTaskSummaryKV(ts: TaskSummaryConfig, kv: { key: string; value: string }) {
-	if (kv.key === "show") ts.show = kv.value === "true";
-	if (kv.key === "progress") ts.showProgress = kv.value === "true";
-	if (kv.key === "showList") ts.showList = kv.value === "true";
-	if (kv.key === "due") ts.showDue = kv.value === "true";
-	if (kv.key === "checkable") ts.checkable = kv.value === "true";
+	if (kv.key === "show") ts.show = parseBool(kv.value);
+	if (kv.key === "progress") ts.showProgress = parseBool(kv.value);
+	if (kv.key === "showList") ts.showList = parseBool(kv.value);
+	if (kv.key === "due") ts.showDue = parseBool(kv.value);
+	if (kv.key === "checkable") ts.checkable = parseBool(kv.value);
 	if (kv.key === "count") {
-		const n = parseInt(kv.value, 10);
-		ts.count = Number.isFinite(n) && n > 0 ? n : undefined;
+		ts.count = safeParseInt(kv.value, undefined, 1);
 	}
 	if (kv.key === "path") ts.path = kv.value;
 	if (kv.key === "tags") ts.tags = splitCsv(kv.value);
@@ -827,24 +942,39 @@ function applyTaskSummaryKV(ts: TaskSummaryConfig, kv: { key: string; value: str
 
 // ── Utility ──────────────────────────────────────────────
 
+/**
+ * Strip one pair of *matching* surrounding quotes. Mismatched quotes (e.g.
+ * `"foo'`) are left intact rather than silently truncated.
+ */
+function stripQuotes(value: string): string {
+	const first = value[0];
+	if ((first === '"' || first === "'") && value.length >= 2 && value[value.length - 1] === first) {
+		return value.slice(1, -1);
+	}
+	return value;
+}
+
 function splitKV(line: string): { key: string; value: string } | null {
 	const idx = line.indexOf(":");
 	if (idx === -1) return null;
 	const key = line.slice(0, idx).trim();
-	const value = line
-		.slice(idx + 1)
-		.trim()
-		.replace(/^["']|["']$/g, "");
+	const value = stripQuotes(line.slice(idx + 1).trim());
 	return { key, value };
 }
 
 function parseValue(line: string, prefix: string): string {
-	return line
-		.slice(prefix.length)
-		.trim()
-		.replace(/^["']|["']$/g, "");
+	return stripQuotes(line.slice(prefix.length).trim());
 }
 
+/**
+ * Build the neutral base config used as a fallback for empty code blocks and as
+ * the seed that {@link NexusRenderer} overrides with user settings.
+ *
+ * All optional blocks are disabled and `blocks` is empty, so callers control
+ * exactly what renders.
+ *
+ * @returns A `DashboardConfig` with every block disabled
+ */
 export function buildDefaultConfig(): DashboardConfig {
 	const config: DashboardConfig = {
 		header: { text: "", font: "ANSI Shadow", color: "#8A5CF6", size: 1, enabled: false },

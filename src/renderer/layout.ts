@@ -9,13 +9,13 @@ type BlockDispatcher = (
 ) => Promise<void>;
 
 /** Render a row of columns, dispatching each child block into its column. */
-export function renderRow(
+export async function renderRow(
 	ctx: RendererContext,
 	containerEl: HTMLElement,
 	row: RowConfig,
 	config: DashboardConfig,
 	dispatch: BlockDispatcher,
-): void {
+): Promise<void> {
 	if (row.children.length === 0) return;
 
 	const cols = row.columns || row.children.length || 2;
@@ -46,7 +46,7 @@ export function renderRow(
 		}
 
 		const child = children[i];
-		void dispatch(colEl, child, config);
+		await dispatch(colEl, child, config);
 
 		if (i < children.length - 1 && i < cols - 1) {
 			const dividerEl = rowEl.createDiv({ cls: "nexus-row-divider" });
@@ -56,12 +56,12 @@ export function renderRow(
 }
 
 /** Render a column of stacked blocks, dispatching each child block. */
-export function renderColumn(
+export async function renderColumn(
 	containerEl: HTMLElement,
 	column: ColumnConfig,
 	config: DashboardConfig,
 	dispatch: BlockDispatcher,
-): void {
+): Promise<void> {
 	if (column.children.length === 0) return;
 
 	const columnEl = containerEl.createDiv({ cls: "nexus-column" });
@@ -81,7 +81,7 @@ export function renderColumn(
 	for (let i = 0; i < column.children.length; i++) {
 		const child = column.children[i];
 		const itemEl = columnEl.createDiv({ cls: "nexus-column-item" });
-		void dispatch(itemEl, child, config);
+		await dispatch(itemEl, child, config);
 
 		if (i < column.children.length - 1 && !column.noDividers) {
 			columnEl.createDiv({ cls: "nexus-column-divider" });
@@ -173,31 +173,41 @@ function setupColumnDrag(
 	let isDragging = false;
 	let startX = 0;
 	let startLeftWidth = 0;
+	let availableWidth = 0;
+	let pendingX: number | null = null;
+	let rafId = 0;
 
 	const cols = rowEl.querySelectorAll(".nexus-row-col");
 	const leftCol = cols[dividerIdx] as HTMLElement;
 	const rightCol = cols[dividerIdx + 1] as HTMLElement;
 	if (!leftCol || !rightCol) return;
 
-	const onMouseMove = (e: MouseEvent) => {
-		if (!isDragging) return;
-		const rowRect = rowEl.getBoundingClientRect();
-		const dx = e.clientX - startX;
-		const rowWidth = rowRect.width;
-		const numDividers = cols.length - 1;
-		const availableWidth = rowWidth - numDividers * DIVIDER_WIDTH;
+	const applyMove = () => {
+		rafId = 0;
+		if (!isDragging || pendingX === null) return;
+		const dx = pendingX - startX;
+		pendingX = null;
 
 		let leftPct = ((startLeftWidth + dx) / availableWidth) * 100;
 		leftPct = Math.max(MIN_WIDTH, Math.min(100 - MIN_WIDTH, leftPct));
-		const rightPct = 100 - leftPct;
 
 		leftCol.style.setProperty("--nexus-row-width", `${leftPct}%`);
-		rightCol.style.setProperty("--nexus-row-width", `${rightPct}%`);
+		rightCol.style.setProperty("--nexus-row-width", `${100 - leftPct}%`);
+	};
+
+	const onMouseMove = (e: MouseEvent) => {
+		if (!isDragging) return;
+		pendingX = e.clientX;
+		if (!rafId) rafId = requestAnimationFrame(applyMove);
 	};
 
 	const onMouseUp = () => {
 		if (!isDragging) return;
 		isDragging = false;
+		if (rafId) {
+			cancelAnimationFrame(rafId);
+			rafId = 0;
+		}
 		dividerEl.removeClass("dragging");
 		document.removeEventListener("mousemove", onMouseMove);
 		document.removeEventListener("mouseup", onMouseUp);
@@ -211,6 +221,10 @@ function setupColumnDrag(
 	dividerEl.addEventListener("mousedown", (e) => {
 		isDragging = true;
 		startX = e.clientX;
+		// Rect reads are done once here: the row's outer width is constant for
+		// the whole drag, so re-measuring per mousemove would only force reflow.
+		const rowWidth = rowEl.getBoundingClientRect().width;
+		availableWidth = rowWidth - (cols.length - 1) * DIVIDER_WIDTH;
 		startLeftWidth = leftCol.getBoundingClientRect().width;
 		dividerEl.addClass("dragging");
 		e.preventDefault();

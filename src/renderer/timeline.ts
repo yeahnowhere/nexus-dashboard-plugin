@@ -110,16 +110,19 @@ function renderTimelineBody(
 		return;
 	}
 
-	const listEl = wrapper.createDiv({
-		cls: `nexus-timeline${opts.activityTimelineShowFade ? " nexus-fade-mask" : ""}`,
-	});
+	const listEl = document.createElement("div");
+	listEl.className = `nexus-timeline${opts.activityTimelineShowFade ? " nexus-fade-mask" : ""}`;
 	listEl.style.maxHeight = `${opts.activityTimelineMaxHeight}px`;
 
+	// Rows are built on the detached list, then attached in one operation, so a
+	// long timeline doesn't invalidate layout once per appended row.
 	if (group === "file") {
 		renderTimelineByFile(ctx, listEl, events, config);
 	} else {
 		renderTimelineByDay(ctx, listEl, events, config);
 	}
+
+	wrapper.appendChild(listEl);
 }
 
 /** Resolve a TimelineConfig into ActivityEvents using settings defaults + ctx data. */
@@ -140,7 +143,7 @@ export function buildTimelineEventsFor(
 	return buildTimelineEventsBase(
 		{
 			log: opts.activityLog || [],
-			files: ctx.getRecentFiles().map((f) => ({
+			files: ctx.snapshot.recentFiles().map((f) => ({
 				path: f.path,
 				extension: f.extension,
 				mtime: f.stat.mtime,

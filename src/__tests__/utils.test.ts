@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasExtension, ensureExtension } from "../utils";
+import { hasExtension, ensureExtension, parseBool } from "../utils";
 
 describe("hasExtension", () => {
 	it("returns true for paths with extensions", () => {
@@ -33,5 +33,28 @@ describe("ensureExtension", () => {
 
 	it("handles edge cases", () => {
 		expect(ensureExtension("")).toBe(".md");
+	});
+});
+
+describe("parseBool", () => {
+	it("parses true/false case-insensitively", () => {
+		expect(parseBool("true")).toBe(true);
+		expect(parseBool("TRUE")).toBe(true);
+		expect(parseBool("True")).toBe(true);
+		expect(parseBool("false")).toBe(false);
+		expect(parseBool("FALSE")).toBe(false);
+		expect(parseBool("False")).toBe(false);
+	});
+
+	it("trims surrounding whitespace", () => {
+		expect(parseBool("  true  ")).toBe(true);
+		expect(parseBool("\tfalse")).toBe(false);
+	});
+
+	it("falls back for non-boolean values", () => {
+		expect(parseBool("yes")).toBe(false);
+		expect(parseBool("1")).toBe(false);
+		expect(parseBool("")).toBe(false);
+		expect(parseBool("yes", true)).toBe(true);
 	});
 });

@@ -563,3 +563,54 @@ tasks:
 		}
 	});
 });
+
+describe("parseDashboard edge cases", () => {
+	it("parses booleans case-insensitively", () => {
+		const config = parseDashboard(`
+tasks:
+  show: TRUE
+  showList: False
+graph:
+  showGraph: Yes
+`);
+		const tasks = config.blocks[0];
+		expect(tasks.kind).toBe("tasks");
+		if (tasks.kind === "tasks") {
+			expect(tasks.show).toBe(true);
+			expect(tasks.showList).toBe(false);
+		}
+		expect(config.graph.enabled).toBe(false);
+	});
+
+	it("keeps mismatched quotes intact", () => {
+		const config = parseDashboard(`
+section:
+  cards:
+    - type: big
+      label: "Well-formed
+      path: Normal.md
+`);
+		const section = config.blocks[0];
+		expect(section.kind).toBe("section");
+		if (section.kind === "section") {
+			expect(section.cards[0].label).toBe('"Well-formed');
+		}
+	});
+
+	it("does not hijack a non-card context on '- type:'", () => {
+		const config = parseDashboard(`
+links:
+  title: LINKS
+  - url: https://example.com
+    label: Example
+    - type: mini
+    - label: NotACard
+`);
+		const links = config.blocks.find((b) => b.kind === "links");
+		expect(links).toBeDefined();
+		expect(config.blocks.some((b) => b.kind === "section")).toBe(false);
+		if (links && links.kind === "links") {
+			expect(links.items[0].label).toBe("Example");
+		}
+	});
+});
