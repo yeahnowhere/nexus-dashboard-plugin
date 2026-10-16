@@ -4,7 +4,7 @@ Code-block driven MOC dashboard for Obsidian.
 
 ## Install
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/johnsstalk/nexus-dashboard-plugin/releases)
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/yeahnowhere/nexus-dashboard-plugin/releases)
 2. Create a folder `nexus-dashboard` in `.obsidian/plugins/`
 3. Copy the three files into it
 4. Enable the plugin in **Settings > Community Plugins**
@@ -398,7 +398,7 @@ npm install
 npm run dev          # watch mode
 npm run typecheck    # type-check (tsc --noEmit)
 npm run lint         # ESLint
-npm run test         # Vitest (312 tests)
+npm run test         # Vitest (371 tests)
 npm run build        # typecheck + production build
 ```
 
