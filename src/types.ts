@@ -514,31 +514,16 @@ export interface ColumnLayoutEntry {
 	dividerSlots?: Record<string, string>;
 }
 
-/** A single stat-counter entry shown in the dashboard header area. */
-export interface StatEntry {
-	/** Vault-relative folder path to count notes in. */
-	folder: string;
-	/** Display label next to the count (e.g. "Notes", "Projects"). */
-	label: string;
-	/** Metric to compute for the folder. Defaults to `"files"`. */
-	metric?: StatMetric;
-	/** Time window to filter files by. Defaults to `"all"`. */
-	scope?: StatScope;
-	/** When `true`, include files in subfolders recursively. Defaults to `true`. */
-	recursive?: boolean;
-}
+/**
+ * A single stat-counter entry shown in the dashboard header area.
+ * @remarks Identical to {@link StatItem} (the parsed-config form). Kept as a
+ * named alias so the settings and config domains read naturally without the
+ * two shapes drifting apart.
+ */
+export type StatEntry = StatItem;
 
 /** Persisted settings for the "+ New Note" quick-create button. */
-export interface NewNoteSettings {
-	/** Whether the button is shown. */
-	enabled: boolean;
-	/** Button text. */
-	label: string;
-	/** Vault-relative folder where new notes are created. */
-	folder: string;
-	/** Optional template file applied to new notes. */
-	template: string;
-}
+export type NewNoteSettings = NewNoteConfig;
 
 /** Visual styling configuration for divider lines rendered across the dashboard. */
 export interface DividerDesign {

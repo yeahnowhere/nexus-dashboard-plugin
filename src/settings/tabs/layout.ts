@@ -11,6 +11,169 @@ import { safeParseInt } from "../../utils";
 import { CONTENT_SLOT_OPTIONS, collapseKey } from "../shared";
 import { ConfirmModal } from "../confirm-modal";
 
+/** Per-slot override maps shared by row and column layouts. */
+interface SlotOverrideMaps {
+	slotHeadings?: Record<string, HeadingConfig>;
+	vaultListSlots?: Record<string, string>;
+	fileTypeListSlots?: Record<string, string>;
+	dividerSlots?: Record<string, string>;
+}
+
+/** The `splice`-only view of a list that `setupDragAndDrop` reorders. */
+type ReorderableList = {
+	splice: (start: number, deleteCount: number, ...items: unknown[]) => unknown[];
+};
+
+/**
+ * Shift per-slot override keys down after a slot is removed, so configs follow
+ * their slots. `keyOf` encodes the row (`"i-p"`) vs column (`"p"`) key format.
+ */
+function shiftSlotOverrides(
+	maps: Array<Record<string, unknown> | undefined>,
+	keyOf: (p: number) => string,
+	start: number,
+	newLen: number,
+	oldLen: number,
+): void {
+	for (const map of maps) {
+		if (!map) continue;
+		for (let p = start; p < newLen; p++) {
+			const from = keyOf(p + 1);
+			if (from in map) map[keyOf(p)] = map[from];
+		}
+		for (let p = newLen; p < oldLen; p++) {
+			delete map[keyOf(p)];
+		}
+	}
+}
+
+/** A `CONTENT_SLOT_OPTIONS` dropdown with disabled/selected state and change wiring. */
+function renderSlotSelect(
+	tab: NexusSettingTab,
+	parent: HTMLElement,
+	current: ContentSlotType,
+	onChange: (value: ContentSlotType) => void,
+): void {
+	const select = parent.createEl("select", { cls: "dropdown" });
+	for (const [key, label] of Object.entries(CONTENT_SLOT_OPTIONS)) {
+		const opt = select.createEl("option", { text: label, value: key });
+		if (!tab.isSlotEnabled(key as ContentSlotType)) opt.disabled = true;
+		if (key === current) opt.selected = true;
+	}
+	select.addEventListener("change", () => onChange(select.value as ContentSlotType));
+}
+
+/**
+ * Render the type-specific per-slot config editors (heading / vault list /
+ * file-type list / divider) for one slot, mutating the passed override maps.
+ * Shared by row sub-slots and column slots.
+ */
+function renderSlotExtras(
+	tab: NexusSettingTab,
+	container: HTMLElement,
+	slot: ContentSlotType,
+	subKey: string,
+	headingPad: string,
+	fieldPad: string,
+	maps: SlotOverrideMaps,
+): void {
+	if (slot === "heading") {
+		renderHeadingConfigEditor(
+			container,
+			headingPad,
+			() => (maps.slotHeadings || {})[subKey],
+			async (patch) => {
+				const h = (maps.slotHeadings ??= {});
+				h[subKey] = { ...(h[subKey] || { text: "Section" }), ...patch };
+				await tab.plugin.saveSettings();
+			},
+		);
+	}
+
+	if (slot === "vault-activity") {
+		tab.addVaultListSelector(
+			container,
+			fieldPad,
+			maps.vaultListSlots?.[subKey] || "",
+			async (value) => {
+				(maps.vaultListSlots ??= {})[subKey] = value;
+				await tab.plugin.saveSettings();
+			},
+		);
+	}
+
+	if (slot === "filetypes") {
+		tab.addFileTypeListSelector(
+			container,
+			fieldPad,
+			maps.fileTypeListSlots?.[subKey] || "",
+			async (value) => {
+				(maps.fileTypeListSlots ??= {})[subKey] = value;
+				await tab.plugin.saveSettings();
+			},
+		);
+	}
+
+	if (slot === "divider") {
+		tab.addDividerLabelInput(
+			container,
+			fieldPad,
+			maps.dividerSlots?.[subKey] || "",
+			async (value) => {
+				(maps.dividerSlots ??= {})[subKey] = value;
+				await tab.plugin.saveSettings();
+			},
+		);
+	}
+}
+
+/**
+ * The shared header of a row/column layout card: drag handle, title, delete
+ * button (with confirm), and click-to-collapse. Returns whether the card
+ * should render its expanded body.
+ */
+function renderLayoutCardShell(
+	tab: NexusSettingTab,
+	containerEl: HTMLElement,
+	opts: {
+		scope: "row" | "col";
+		layoutId: string;
+		index: number;
+		list: ReorderableList;
+		titleText: string;
+		removeTitle: string;
+		removeBody: string;
+	},
+): { isCollapsed: boolean } {
+	const key = collapseKey(opts.scope, opts.layoutId);
+	const isCollapsed = tab.isCollapsed(key);
+
+	const heading = containerEl.createDiv({ cls: "nexus-settings-moc-heading" });
+	const { titleWrap, actions } = tab.setupDragAndDrop(heading, opts.index, opts.list, isCollapsed);
+	titleWrap.createEl("span", { text: opts.titleText });
+
+	const deleteBtn = actions.createEl("button", {
+		cls: "nexus-settings-moc-btn--delete",
+		attr: { "aria-label": "Remove" },
+	});
+	setIcon(deleteBtn, "trash");
+	deleteBtn.addEventListener("click", async (e) => {
+		e.stopPropagation();
+		new ConfirmModal(tab.app, `Remove "${opts.removeTitle}"?`, opts.removeBody, async () => {
+			opts.list.splice(opts.index, 1);
+			tab.deleteCollapsed(key);
+			await tab.saveAndRefresh();
+		}).open();
+	});
+
+	heading.addEventListener("click", () => {
+		tab.setCollapsed(key, !isCollapsed);
+		void tab.saveAndRefresh();
+	});
+
+	return { isCollapsed };
+}
+
 /** Render the Dashboard tab: row/column layout builder. */
 export function renderLayoutTab(tab: NexusSettingTab, containerEl: HTMLElement): void {
 	containerEl.createEl("p", {
@@ -123,15 +286,6 @@ function renderRowLayoutCard(
 	index: number,
 ): void {
 	const layoutId = layout.id || `row-${index}`;
-	const isCollapsed = tab.isCollapsed(collapseKey("row", layoutId));
-
-	const heading = containerEl.createDiv({ cls: "nexus-settings-moc-heading" });
-	const { titleWrap, actions } = tab.setupDragAndDrop(
-		heading,
-		index,
-		tab.plugin.settings.rowLayouts,
-		isCollapsed,
-	);
 
 	// Title with slot summary
 	const slots = layout.slots || [];
@@ -150,31 +304,15 @@ function renderRowLayoutCard(
 			return CONTENT_SLOT_OPTIONS[s] || "Empty";
 		})
 		.join(" | ");
-	titleWrap.createEl("span", { text: `${layout.name} (${layout.columns} cols: ${slotSummary})` });
 
-	// Delete button
-	const deleteBtn = actions.createEl("button", {
-		cls: "nexus-settings-moc-btn--delete",
-		attr: { "aria-label": "Remove" },
-	});
-	setIcon(deleteBtn, "trash");
-	deleteBtn.addEventListener("click", async (e) => {
-		e.stopPropagation();
-		new ConfirmModal(
-			tab.app,
-			`Remove "${layout.name}"?`,
-			"This row layout will be removed from your dashboard.",
-			async () => {
-				tab.plugin.settings.rowLayouts.splice(index, 1);
-				await tab.saveAndRefresh();
-			},
-		).open();
-	});
-
-	// Toggle collapse
-	heading.addEventListener("click", () => {
-		tab.setCollapsed(collapseKey("row", layoutId), !isCollapsed);
-		tab.saveAndRefresh();
+	const { isCollapsed } = renderLayoutCardShell(tab, containerEl, {
+		scope: "row",
+		layoutId,
+		index,
+		list: tab.plugin.settings.rowLayouts,
+		titleText: `${layout.name} (${layout.columns} cols: ${slotSummary})`,
+		removeTitle: layout.name,
+		removeBody: "This row layout will be removed from your dashboard.",
 	});
 
 	if (isCollapsed) return;
@@ -369,14 +507,7 @@ function renderRowSlotEditors(
 				slotLabelEl.style.minWidth = "60px";
 			}
 
-			const slotSelect = slotRow.createEl("select", { cls: "dropdown" });
-			for (const [key, label] of Object.entries(CONTENT_SLOT_OPTIONS)) {
-				const opt = slotSelect.createEl("option", { text: label, value: key });
-				if (!tab.isSlotEnabled(key as ContentSlotType)) opt.disabled = true;
-				if (key === currentSlot) opt.selected = true;
-			}
-			slotSelect.addEventListener("change", async () => {
-				const newVal = slotSelect.value as ContentSlotType;
+			renderSlotSelect(tab, slotRow, currentSlot as ContentSlotType, async (newVal) => {
 				if (isSubSlot) {
 					(row.slots[i] as RowLayoutSlot[])[si] = newVal;
 				} else {
@@ -397,84 +528,34 @@ function renderRowSlotEditors(
 						row.slots[i] = arr[0];
 					}
 					// Shift overrides down so configs follow their slots (#1/#2)
-					for (const map of [
+					const maps: Array<Record<string, unknown> | undefined> = [
 						row.slotHeadings,
 						row.vaultListSlots,
 						row.fileTypeListSlots,
 						row.dividerSlots,
-					]) {
-						if (!map) continue;
-						for (let p = si; p < arr.length; p++) {
-							const from = `${i}-${p + 1}`;
-							if (from in map) map[`${i}-${p}`] = map[from];
-						}
-						for (let p = arr.length; p < oldLen; p++) {
-							delete map[`${i}-${p}`];
-						}
-						if (arr.length === 1 && `${i}-0` in map) {
-							map[String(i)] = map[`${i}-0`];
-							delete map[`${i}-0`];
+					];
+					shiftSlotOverrides(maps, (p) => `${i}-${p}`, si, arr.length, oldLen);
+					if (arr.length === 1) {
+						for (const map of maps) {
+							if (map && `${i}-0` in map) {
+								map[String(i)] = map[`${i}-0`];
+								delete map[`${i}-0`];
+							}
 						}
 					}
 					await tab.saveAndRefresh();
 				});
 			}
 
-			// Heading config fields (when slot is "heading")
-			if (currentSlot === "heading") {
-				renderHeadingConfigEditor(
-					container,
-					subKey,
-					isSubSlot,
-					() => {
-						return (row.slotHeadings || {})[subKey];
-					},
-					async (patch) => {
-						const h = (row.slotHeadings ??= {});
-						h[subKey] = { ...(h[subKey] || { text: "Section" }), ...patch };
-						await tab.plugin.saveSettings();
-					},
-				);
-			}
-
-			// Vault list selector (when slot is "vault-activity")
-			if (currentSlot === "vault-activity") {
-				tab.addVaultListSelector(
-					container,
-					isSubSlot ? "68px" : "8px",
-					row.vaultListSlots?.[subKey] || "",
-					async (value) => {
-						(row.vaultListSlots ??= {})[subKey] = value;
-						await tab.plugin.saveSettings();
-					},
-				);
-			}
-
-			// File-type list selector (when slot is "filetypes")
-			if (currentSlot === "filetypes") {
-				tab.addFileTypeListSelector(
-					container,
-					isSubSlot ? "68px" : "8px",
-					row.fileTypeListSlots?.[subKey] || "",
-					async (value) => {
-						(row.fileTypeListSlots ??= {})[subKey] = value;
-						await tab.plugin.saveSettings();
-					},
-				);
-			}
-
-			// Divider label input (when slot is "divider")
-			if (currentSlot === "divider") {
-				tab.addDividerLabelInput(
-					container,
-					isSubSlot ? "68px" : "8px",
-					row.dividerSlots?.[subKey] || "",
-					async (value) => {
-						(row.dividerSlots ??= {})[subKey] = value;
-						await tab.plugin.saveSettings();
-					},
-				);
-			}
+			renderSlotExtras(
+				tab,
+				container,
+				currentSlot as ContentSlotType,
+				subKey,
+				isSubSlot ? "68px" : "8px",
+				isSubSlot ? "68px" : "8px",
+				row,
+			);
 		}
 
 		// "+ Add Slot" button per column
@@ -620,46 +701,19 @@ function renderColumnLayoutCard(
 	index: number,
 ): void {
 	const layoutId = layout.id || String(index);
-	const isCollapsed = tab.isCollapsed(collapseKey("col", layoutId));
-
-	const heading = containerEl.createDiv({ cls: "nexus-settings-moc-heading" });
-	const { titleWrap, actions } = tab.setupDragAndDrop(
-		heading,
-		index,
-		tab.plugin.settings.columnLayouts,
-		isCollapsed,
-	);
 
 	// Title with slot summary
 	const slots = layout.slots || [];
 	const slotSummary = slots.map((s) => CONTENT_SLOT_OPTIONS[s] || "Empty").join(" → ");
-	titleWrap.createEl("span", { text: `${layout.name} (${slotSummary})` });
 
-	// Delete button
-	const deleteBtn = actions.createEl("button", {
-		cls: "nexus-settings-moc-btn--delete",
-		attr: { "aria-label": "Remove" },
-	});
-	setIcon(deleteBtn, "trash");
-	deleteBtn.addEventListener("click", async (e) => {
-		e.stopPropagation();
-		new ConfirmModal(
-			tab.app,
-			`Remove "${layout.name}"?`,
-			"This column layout will be removed from your dashboard.",
-			async () => {
-				tab.plugin.settings.columnLayouts.splice(index, 1);
-				tab.deleteCollapsed(collapseKey("col", layoutId));
-				await tab.saveAndRefresh();
-			},
-		).open();
-	});
-
-	// Toggle collapse
-	heading.addEventListener("click", () => {
-		tab.setCollapsed(collapseKey("col", layoutId), !isCollapsed);
-		void tab.plugin.saveSettings();
-		tab.display();
+	const { isCollapsed } = renderLayoutCardShell(tab, containerEl, {
+		scope: "col",
+		layoutId,
+		index,
+		list: tab.plugin.settings.columnLayouts,
+		titleText: `${layout.name} (${slotSummary})`,
+		removeTitle: layout.name,
+		removeBody: "This column layout will be removed from your dashboard.",
 	});
 
 	if (isCollapsed) return;
@@ -740,14 +794,8 @@ function renderColumnLayoutCard(
 		});
 		slotLabel.style.minWidth = "60px";
 
-		const slotSelect = slotRow.createEl("select", { cls: "dropdown" });
-		for (const [key, label] of Object.entries(CONTENT_SLOT_OPTIONS)) {
-			const opt = slotSelect.createEl("option", { text: label, value: key });
-			if (!tab.isSlotEnabled(key as ContentSlotType)) opt.disabled = true;
-			if (key === colSlots[i]) opt.selected = true;
-		}
-		slotSelect.addEventListener("change", async () => {
-			tab.plugin.settings.columnLayouts[index].slots[i] = slotSelect.value as ContentSlotType;
+		renderSlotSelect(tab, slotRow, colSlots[i], async (value) => {
+			tab.plugin.settings.columnLayouts[index].slots[i] = value;
 			await tab.saveAndRefresh();
 		});
 
@@ -758,80 +806,17 @@ function renderColumnLayoutCard(
 			const oldLen = layoutRef.slots.length;
 			layoutRef.slots.splice(i, 1);
 			// Shift overrides down so configs follow their slots (#3)
-			for (const map of [
+			const maps: Array<Record<string, unknown> | undefined> = [
 				layoutRef.slotHeadings,
 				layoutRef.vaultListSlots,
 				layoutRef.fileTypeListSlots,
 				layoutRef.dividerSlots,
-			]) {
-				if (!map) continue;
-				for (let p = i; p < layoutRef.slots.length; p++) {
-					const from = String(p + 1);
-					if (from in map) map[String(p)] = map[from];
-				}
-				for (let p = layoutRef.slots.length; p < oldLen; p++) {
-					delete map[String(p)];
-				}
-			}
+			];
+			shiftSlotOverrides(maps, (p) => String(p), i, layoutRef.slots.length, oldLen);
 			await tab.saveAndRefresh();
 		});
 
-		// Heading config fields (when slot is "heading")
-		if (colSlots[i] === "heading") {
-			const subKey = String(i);
-			renderHeadingConfigEditor(
-				fields,
-				subKey,
-				false,
-				() => {
-					return (tab.plugin.settings.columnLayouts[index].slotHeadings || {})[subKey];
-				},
-				async (patch) => {
-					const h = (tab.plugin.settings.columnLayouts[index].slotHeadings ??= {});
-					h[subKey] = { ...(h[subKey] || { text: "Section" }), ...patch };
-					await tab.plugin.saveSettings();
-				},
-			);
-		}
-
-		// Vault list selector (when slot is "vault-activity")
-		if (colSlots[i] === "vault-activity") {
-			tab.addVaultListSelector(
-				fields,
-				"68px",
-				tab.plugin.settings.columnLayouts[index].vaultListSlots?.[String(i)] || "",
-				async (value) => {
-					(tab.plugin.settings.columnLayouts[index].vaultListSlots ??= {})[String(i)] = value;
-					await tab.plugin.saveSettings();
-				},
-			);
-		}
-
-		// File-type list selector (when slot is "filetypes")
-		if (colSlots[i] === "filetypes") {
-			tab.addFileTypeListSelector(
-				fields,
-				"68px",
-				tab.plugin.settings.columnLayouts[index].fileTypeListSlots?.[String(i)] || "",
-				async (value) => {
-					(tab.plugin.settings.columnLayouts[index].fileTypeListSlots ??= {})[String(i)] = value;
-					await tab.plugin.saveSettings();
-				},
-			);
-		}
-
-		// Divider label input (when slot is "divider")
-		if (colSlots[i] === "divider") {
-			tab.addDividerLabelInput(
-				fields,
-				"68px",
-				tab.plugin.settings.columnLayouts[index].dividerSlots?.[String(i)] || "",
-				async (value) => {
-					(tab.plugin.settings.columnLayouts[index].dividerSlots ??= {})[String(i)] = value;
-					await tab.plugin.saveSettings();
-				},
-			);
-		}
+		renderSlotExtras(tab, fields, colSlots[i], String(i), "8px", "68px", layout);
 	}
 
 	// Add slot button
@@ -845,13 +830,11 @@ function renderColumnLayoutCard(
 
 function renderHeadingConfigEditor(
 	fields: HTMLElement,
-	_subKey: string,
-	isSubSlot: boolean,
+	pad: string,
 	getCfg: () => HeadingConfig | undefined,
 	onUpdate: (patch: Partial<HeadingConfig>) => Promise<void>,
 ): void {
 	const headingCfg = getCfg() || { text: "Section" };
-	const pad = isSubSlot ? "68px" : "8px";
 
 	const textRow = fields.createDiv({ cls: "nexus-column-slot-row" });
 	textRow.style.display = "flex";

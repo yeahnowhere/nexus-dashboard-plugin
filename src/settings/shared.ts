@@ -1,9 +1,12 @@
 import type { App } from "obsidian";
 import type { ContentSlotType } from "../types";
 import { ICONS } from "../icons";
+import { TtlCache } from "../cache";
 
+/** All selectable icon names, derived from the icon glyph table. */
 export const ICON_NAMES = Object.keys(ICONS);
 
+/** Human-readable labels for each slot type, used by slot pickers. */
 export const CONTENT_SLOT_OPTIONS: Record<ContentSlotType, string> = {
 	none: "Empty",
 	stats: "Stats",
@@ -47,35 +50,29 @@ export function collapseKey(scope: string, id: string | number): string {
 	return `${scope}:${id}`;
 }
 
-let vaultFoldersCache: string[] | null = null;
-let vaultFoldersCacheAt = 0;
+const vaultFoldersCache = new TtlCache<string[]>(5000);
 
 /** Drop the cached vault-folder list (e.g. after a folder rename/move). */
 export function clearVaultFoldersCache(): void {
-	vaultFoldersCache = null;
-	vaultFoldersCacheAt = 0;
+	vaultFoldersCache.invalidate();
 }
 
 function getVaultFolders(app: App): string[] {
-	const now = Date.now();
-	if (vaultFoldersCache && now - vaultFoldersCacheAt < 5000) {
-		return vaultFoldersCache;
-	}
-	const folders = new Set<string>();
-	for (const file of app.vault.getMarkdownFiles()) {
-		const parts = file.path.split("/");
-		if (parts.length > 1) {
-			// Collect every unique folder path
-			let current = "";
-			for (let i = 0; i < parts.length - 1; i++) {
-				current = current ? `${current}/${parts[i]}` : parts[i];
-				folders.add(current);
+	return vaultFoldersCache.get(() => {
+		const folders = new Set<string>();
+		for (const file of app.vault.getMarkdownFiles()) {
+			const parts = file.path.split("/");
+			if (parts.length > 1) {
+				// Collect every unique folder path
+				let current = "";
+				for (let i = 0; i < parts.length - 1; i++) {
+					current = current ? `${current}/${parts[i]}` : parts[i];
+					folders.add(current);
+				}
 			}
 		}
-	}
-	vaultFoldersCache = Array.from(folders).sort();
-	vaultFoldersCacheAt = now;
-	return vaultFoldersCache;
+		return Array.from(folders).sort();
+	});
 }
 
 // ── SVG Icons ──────────────────────────────────────────────────

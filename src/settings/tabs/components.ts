@@ -17,6 +17,7 @@ import type {
 	DividerDesign,
 	StatMetric,
 	StatScope,
+	NexusSettings,
 } from "../../types";
 import { SMALL_ICONS } from "../../icons";
 import { DIVIDER_PRESETS, DIVIDER_PRESET_NAMES, detectDividerPreset } from "../../defaults";
@@ -24,6 +25,44 @@ import { safeParseInt } from "../../utils";
 import { statSummary } from "../../stats";
 import { ConfirmModal } from "../confirm-modal";
 import { ICON_NAMES, DividerControlSettings, getVaultFolders, SVG, collapseKey } from "../shared";
+
+/** Settings keys whose value is a plain boolean. */
+type BooleanKey = {
+	[K in keyof NexusSettings]-?: NexusSettings[K] extends boolean ? K : never;
+}[keyof NexusSettings];
+
+/** Settings keys whose value is a plain (non-literal) string. */
+type StringKey = {
+	[K in keyof NexusSettings]-?: string extends NexusSettings[K] ? K : never;
+}[keyof NexusSettings];
+
+/**
+ * Build the "show divider + label" control settings for a component card from
+ * a pair of settings keys. Replaces the eight near-identical object literals
+ * previously written inline in each section.
+ */
+function dividerControl(
+	tab: NexusSettingTab,
+	showKey: BooleanKey,
+	labelKey: StringKey,
+	labelPlaceholder: string,
+	labelFallback?: string,
+): DividerControlSettings {
+	const settings = tab.plugin.settings;
+	return {
+		show: settings[showKey],
+		label: settings[labelKey],
+		labelPlaceholder,
+		onShow: async (value) => {
+			settings[showKey] = value;
+			await tab.plugin.saveSettings();
+		},
+		onLabel: async (value) => {
+			settings[labelKey] = labelFallback !== undefined ? value || labelFallback : value;
+			await tab.plugin.saveSettings();
+		},
+	};
+}
 
 /** Render the Components tab: card/link/stats configs that fill layout slots. */
 export function renderComponentsTab(tab: NexusSettingTab, containerEl: HTMLElement): void {
@@ -496,19 +535,7 @@ function renderMocCardsSection(tab: NexusSettingTab, containerEl: HTMLElement): 
 		"MOC Cards",
 		"Map of content cards",
 		tab.plugin.settings.showMocCards,
-		{
-			show: tab.plugin.settings.showMocDivider,
-			label: tab.plugin.settings.mocDividerLabel,
-			labelPlaceholder: "MOC CARDS",
-			onShow: async (value) => {
-				tab.plugin.settings.showMocDivider = value;
-				await tab.plugin.saveSettings();
-			},
-			onLabel: async (value) => {
-				tab.plugin.settings.mocDividerLabel = value || "MOC CARDS";
-				await tab.plugin.saveSettings();
-			},
-		},
+		dividerControl(tab, "showMocDivider", "mocDividerLabel", "MOC CARDS", "MOC CARDS"),
 		async (value) => {
 			tab.plugin.settings.showMocCards = value;
 			await tab.plugin.saveSettings();
@@ -681,7 +708,7 @@ function renderStatsSection(tab: NexusSettingTab, containerEl: HTMLElement): voi
 				.addText((text) =>
 					text
 						.setPlaceholder("Templates/Daily Note")
-						.setValue(tab.plugin.settings.statsNewNote.template)
+						.setValue(tab.plugin.settings.statsNewNote.template || "")
 						.onChange(async (value) => {
 							tab.plugin.settings.statsNewNote.template = value.trim();
 							await tab.plugin.saveSettings();
@@ -732,19 +759,7 @@ function renderVaultActivitySection(tab: NexusSettingTab, containerEl: HTMLEleme
 		"Vault Activity",
 		"Terminal-style file lists",
 		tab.plugin.settings.showVaultActivity,
-		{
-			show: tab.plugin.settings.showVaultActivityDivider,
-			label: tab.plugin.settings.vaultActivityLabel,
-			labelPlaceholder: "VAULT ACTIVITY",
-			onShow: async (value) => {
-				tab.plugin.settings.showVaultActivityDivider = value;
-				await tab.plugin.saveSettings();
-			},
-			onLabel: async (value) => {
-				tab.plugin.settings.vaultActivityLabel = value;
-				await tab.plugin.saveSettings();
-			},
-		},
+		dividerControl(tab, "showVaultActivityDivider", "vaultActivityLabel", "VAULT ACTIVITY"),
 		async (value) => {
 			tab.plugin.settings.showVaultActivity = value;
 			await tab.plugin.saveSettings();
@@ -830,19 +845,13 @@ function renderQuickLinksSection(tab: NexusSettingTab, containerEl: HTMLElement)
 		"Quick Links",
 		"Links to open instantly",
 		tab.plugin.settings.showQuickLinks,
-		{
-			show: tab.plugin.settings.showQuickLinksDivider,
-			label: tab.plugin.settings.quickLinksDividerLabel,
-			labelPlaceholder: "Quick Links",
-			onShow: async (value) => {
-				tab.plugin.settings.showQuickLinksDivider = value;
-				await tab.plugin.saveSettings();
-			},
-			onLabel: async (value) => {
-				tab.plugin.settings.quickLinksDividerLabel = value || "Quick Links";
-				await tab.plugin.saveSettings();
-			},
-		},
+		dividerControl(
+			tab,
+			"showQuickLinksDivider",
+			"quickLinksDividerLabel",
+			"Quick Links",
+			"Quick Links",
+		),
 		async (value) => {
 			tab.plugin.settings.showQuickLinks = value;
 			await tab.plugin.saveSettings();
@@ -872,19 +881,7 @@ function renderHeatmapSection(tab: NexusSettingTab, containerEl: HTMLElement): v
 		"Heatmap",
 		"GitHub-style contribution calendar",
 		tab.plugin.settings.showHeatmap,
-		{
-			show: tab.plugin.settings.showHeatmapDivider,
-			label: tab.plugin.settings.heatmapLabel,
-			labelPlaceholder: "CONTRIBUTION ACTIVITY",
-			onShow: async (value) => {
-				tab.plugin.settings.showHeatmapDivider = value;
-				await tab.plugin.saveSettings();
-			},
-			onLabel: async (value) => {
-				tab.plugin.settings.heatmapLabel = value;
-				await tab.plugin.saveSettings();
-			},
-		},
+		dividerControl(tab, "showHeatmapDivider", "heatmapLabel", "CONTRIBUTION ACTIVITY"),
 		async (value) => {
 			tab.plugin.settings.showHeatmap = value;
 			await tab.plugin.saveSettings();
@@ -915,19 +912,7 @@ function renderActivityTimelineSection(tab: NexusSettingTab, containerEl: HTMLEl
 		"Activity Timeline",
 		"Chronological log of vault activity",
 		tab.plugin.settings.showActivityTimeline,
-		{
-			show: tab.plugin.settings.showActivityTimelineDivider,
-			label: tab.plugin.settings.activityTimelineLabel,
-			labelPlaceholder: "ACTIVITY",
-			onShow: async (value) => {
-				tab.plugin.settings.showActivityTimelineDivider = value;
-				await tab.plugin.saveSettings();
-			},
-			onLabel: async (value) => {
-				tab.plugin.settings.activityTimelineLabel = value;
-				await tab.plugin.saveSettings();
-			},
-		},
+		dividerControl(tab, "showActivityTimelineDivider", "activityTimelineLabel", "ACTIVITY"),
 		async (value) => {
 			tab.plugin.settings.showActivityTimeline = value;
 			await tab.plugin.saveSettings();
@@ -1073,19 +1058,7 @@ function renderClockSection(tab: NexusSettingTab, containerEl: HTMLElement): voi
 		"Clock",
 		"Real-time digital clock",
 		tab.plugin.settings.showClock,
-		{
-			show: tab.plugin.settings.showClockDivider,
-			label: tab.plugin.settings.clockLabel,
-			labelPlaceholder: "CLOCK",
-			onShow: async (value) => {
-				tab.plugin.settings.showClockDivider = value;
-				await tab.plugin.saveSettings();
-			},
-			onLabel: async (value) => {
-				tab.plugin.settings.clockLabel = value;
-				await tab.plugin.saveSettings();
-			},
-		},
+		dividerControl(tab, "showClockDivider", "clockLabel", "CLOCK"),
 		async (value) => {
 			tab.plugin.settings.showClock = value;
 			await tab.plugin.saveSettings();
@@ -1148,19 +1121,7 @@ function renderFileTypesSection(tab: NexusSettingTab, containerEl: HTMLElement):
 		"File Types",
 		"Stacked bar of vault file composition",
 		tab.plugin.settings.showFileTypeChart,
-		{
-			show: tab.plugin.settings.showFileTypeChartDivider,
-			label: tab.plugin.settings.fileTypeChartLabel,
-			labelPlaceholder: "FILE TYPES",
-			onShow: async (value) => {
-				tab.plugin.settings.showFileTypeChartDivider = value;
-				await tab.plugin.saveSettings();
-			},
-			onLabel: async (value) => {
-				tab.plugin.settings.fileTypeChartLabel = value;
-				await tab.plugin.saveSettings();
-			},
-		},
+		dividerControl(tab, "showFileTypeChartDivider", "fileTypeChartLabel", "FILE TYPES"),
 		async (value) => {
 			tab.plugin.settings.showFileTypeChart = value;
 			await tab.plugin.saveSettings();
@@ -1214,19 +1175,7 @@ function renderTaskSummarySection(tab: NexusSettingTab, containerEl: HTMLElement
 		"Task Summary",
 		"Open/done tasks with progress",
 		tab.plugin.settings.showTaskSummary,
-		{
-			show: tab.plugin.settings.showTaskSummaryDivider,
-			label: tab.plugin.settings.taskSummaryLabel,
-			labelPlaceholder: "TASKS",
-			onShow: async (value) => {
-				tab.plugin.settings.showTaskSummaryDivider = value;
-				await tab.plugin.saveSettings();
-			},
-			onLabel: async (value) => {
-				tab.plugin.settings.taskSummaryLabel = value;
-				await tab.plugin.saveSettings();
-			},
-		},
+		dividerControl(tab, "showTaskSummaryDivider", "taskSummaryLabel", "TASKS"),
 		async (value) => {
 			tab.plugin.settings.showTaskSummary = value;
 			await tab.plugin.saveSettings();
@@ -1538,28 +1487,16 @@ export function renderVaultListEntry(
 	vl: VaultListEntry,
 	index: number,
 ): void {
-	const entry = containerEl.createDiv({ cls: "nexus-vault-list-entry" });
-
-	const head = entry.createDiv({ cls: "nexus-vault-list-entry-head" });
-	head.createSpan({ cls: "nexus-vault-list-entry-name", text: vl.name || "Untitled" });
-	const removeBtn = head.createEl("button", {
-		cls: "nexus-settings-moc-btn--delete",
-		attr: { "aria-label": "Remove" },
-	});
-	setIcon(removeBtn, "trash");
-	removeBtn.addEventListener("click", async () => {
-		new ConfirmModal(
-			tab.app,
-			`Remove "${vl.name}"?`,
-			"This vault list will be removed from the dashboard.",
-			async () => {
-				tab.plugin.settings.vaultLists.splice(index, 1);
-				await tab.saveAndRefresh();
-			},
-		).open();
-	});
-
-	const grid = entry.createDiv({ cls: "nexus-vault-list-entry-grid" });
+	const grid = renderListEntryHead(
+		tab,
+		containerEl,
+		vl.name,
+		"This vault list will be removed from the dashboard.",
+		async () => {
+			tab.plugin.settings.vaultLists.splice(index, 1);
+			await tab.saveAndRefresh();
+		},
+	);
 
 	addVaultListField(tab, grid, "Path", vl.path, (value) => {
 		tab.plugin.settings.vaultLists[index].path = value;
@@ -1584,28 +1521,16 @@ export function renderFileTypeListEntry(
 	ft: FileTypeListEntry,
 	index: number,
 ): void {
-	const entry = containerEl.createDiv({ cls: "nexus-vault-list-entry" });
-
-	const head = entry.createDiv({ cls: "nexus-vault-list-entry-head" });
-	head.createSpan({ cls: "nexus-vault-list-entry-name", text: ft.name || "Untitled" });
-	const removeBtn = head.createEl("button", {
-		cls: "nexus-settings-moc-btn--delete",
-		attr: { "aria-label": "Remove" },
-	});
-	setIcon(removeBtn, "trash");
-	removeBtn.addEventListener("click", async () => {
-		new ConfirmModal(
-			tab.app,
-			`Remove "${ft.name}"?`,
-			"This file-type list will be removed from the dashboard.",
-			async () => {
-				tab.plugin.settings.fileTypeLists.splice(index, 1);
-				await tab.saveAndRefresh();
-			},
-		).open();
-	});
-
-	const grid = entry.createDiv({ cls: "nexus-vault-list-entry-grid" });
+	const grid = renderListEntryHead(
+		tab,
+		containerEl,
+		ft.name,
+		"This file-type list will be removed from the dashboard.",
+		async () => {
+			tab.plugin.settings.fileTypeLists.splice(index, 1);
+			await tab.saveAndRefresh();
+		},
+	);
 
 	addVaultListField(tab, grid, "Name", ft.name, (value) => {
 		tab.plugin.settings.fileTypeLists[index].name = value;
@@ -1621,6 +1546,34 @@ export function renderFileTypeListEntry(
 	});
 }
 
+/**
+ * Shared shell for a named list entry: the head row (name + trash button with
+ * confirm) plus the returned grid the caller fills with fields.
+ */
+function renderListEntryHead(
+	tab: NexusSettingTab,
+	containerEl: HTMLElement,
+	name: string,
+	removeBody: string,
+	onRemove: () => Promise<void>,
+): HTMLElement {
+	const entry = containerEl.createDiv({ cls: "nexus-vault-list-entry" });
+
+	const head = entry.createDiv({ cls: "nexus-vault-list-entry-head" });
+	head.createSpan({ cls: "nexus-vault-list-entry-name", text: name || "Untitled" });
+	const removeBtn = head.createEl("button", {
+		cls: "nexus-settings-moc-btn--delete",
+		attr: { "aria-label": "Remove" },
+	});
+	setIcon(removeBtn, "trash");
+	removeBtn.addEventListener("click", async () => {
+		new ConfirmModal(tab.app, `Remove "${name}"?`, removeBody, onRemove).open();
+	});
+
+	return entry.createDiv({ cls: "nexus-vault-list-entry-grid" });
+}
+
+/** Debounced text field inside a list-entry grid. */
 function addVaultListField(
 	tab: NexusSettingTab,
 	parent: HTMLElement,
@@ -1628,22 +1581,11 @@ function addVaultListField(
 	value: string,
 	onValue: (value: string) => void,
 ): void {
-	const field = parent.createDiv({ cls: "nexus-vault-list-entry-field" });
-	field.createEl("label", { cls: "nexus-vault-list-entry-field-label", text: label });
-	const input = field.createEl("input", {
-		cls: "nexus-vault-list-entry-input",
-		attr: { type: "text", value },
-	});
-	let timer: ReturnType<typeof setTimeout> | null = null;
-	input.addEventListener("input", () => {
-		onValue(input.value);
-		if (timer) clearTimeout(timer);
-		timer = setTimeout(() => {
-			void tab.plugin.saveSettings();
-		}, 200);
-	});
+	const input = addListField(parent, label, { type: "text", value });
+	wireListField(tab, input, () => onValue(input.value));
 }
 
+/** Debounced numeric field inside a list-entry grid (blank = undefined). */
 function addVaultListNumberField(
 	tab: NexusSettingTab,
 	parent: HTMLElement,
@@ -1651,14 +1593,12 @@ function addVaultListNumberField(
 	value: number | undefined,
 	onValue: (value: number | undefined) => void,
 ): void {
-	const field = parent.createDiv({ cls: "nexus-vault-list-entry-field" });
-	field.createEl("label", { cls: "nexus-vault-list-entry-field-label", text: label });
-	const input = field.createEl("input", {
-		cls: "nexus-vault-list-entry-input",
-		attr: { type: "number", min: "0", value: value != null ? String(value) : "" },
+	const input = addListField(parent, label, {
+		type: "number",
+		min: "0",
+		value: value != null ? String(value) : "",
 	});
-	let timer: ReturnType<typeof setTimeout> | null = null;
-	input.addEventListener("input", () => {
+	wireListField(tab, input, () => {
 		const raw = input.value.trim();
 		let next: number | undefined;
 		if (raw !== "") {
@@ -1666,6 +1606,23 @@ function addVaultListNumberField(
 			next = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 		}
 		onValue(next);
+	});
+}
+
+function addListField(
+	parent: HTMLElement,
+	label: string,
+	attrs: Record<string, string>,
+): HTMLInputElement {
+	const field = parent.createDiv({ cls: "nexus-vault-list-entry-field" });
+	field.createEl("label", { cls: "nexus-vault-list-entry-field-label", text: label });
+	return field.createEl("input", { cls: "nexus-vault-list-entry-input", attr: attrs });
+}
+
+function wireListField(tab: NexusSettingTab, input: HTMLInputElement, onInput: () => void): void {
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	input.addEventListener("input", () => {
+		onInput();
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(() => {
 			void tab.plugin.saveSettings();
