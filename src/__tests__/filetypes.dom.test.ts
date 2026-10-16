@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from "vitest";
-import { renderFileTypeChart, FILETYPE_PALETTE } from "../renderer/filetypes";
+import { renderFileTypeChart, levelForCount, FILETYPE_PALETTE } from "../renderer/filetypes";
 import { makeContext } from "./helpers/render-context";
 import type { FileTypeChartConfig } from "../types";
 
@@ -81,18 +81,56 @@ describe("renderFileTypeChart", () => {
 		expect(labels).toEqual(["md", "js", "png"]);
 	});
 
-	it("cycles colors through the palette for many extensions", () => {
-		const files = Array.from({ length: 10 }, (_, i) => ({
-			path: `file.${String.fromCharCode(97 + i)}`,
-		}));
+	it("colors the dominant type strongest and rarer types lighter by count", () => {
+		const files = [
+			...Array.from({ length: 100 }, (_, i) => ({ path: `n${i}.md` })),
+			...Array.from({ length: 10 }, (_, i) => ({ path: `c${i}.png` })),
+			{ path: "one.yml" },
+		];
 		const ctx = makeContext({ files });
 		const el = host();
 		renderFileTypeChart(ctx, el, makeConfig());
 
 		const dots = Array.from(el.querySelectorAll<HTMLElement>(".nexus-filetypes-legend-dot"));
-		expect(dots.length).toBe(10);
+		expect(dots.length).toBe(3);
 		expect(dots[0].style.background).toBe(`var(${FILETYPE_PALETTE[0]})`);
-		expect(dots[8].style.background).toBe(`var(${FILETYPE_PALETTE[8 % FILETYPE_PALETTE.length]})`);
+		expect(dots[1].style.background).toBe(`var(${FILETYPE_PALETTE[levelForCount(10, 100, 8)]})`);
+		expect(dots[2].style.background).toBe(`var(${FILETYPE_PALETTE[levelForCount(1, 100, 8)]})`);
+		expect(levelForCount(1, 100, 8)).toBeGreaterThan(levelForCount(10, 100, 8));
+	});
+
+	it("gives equal counts the same color", () => {
+		const ctx = makeContext({
+			files: [
+				{ path: "a.md" },
+				{ path: "b.md" },
+				{ path: "c.png" },
+				{ path: "d.png" },
+				{ path: "e.js" },
+				{ path: "f.js" },
+			],
+		});
+		const el = host();
+		renderFileTypeChart(ctx, el, makeConfig());
+
+		const dots = Array.from(el.querySelectorAll<HTMLElement>(".nexus-filetypes-legend-dot"));
+		expect(dots.length).toBe(3);
+		expect(dots[0].style.background).toBe(dots[1].style.background);
+		expect(dots[1].style.background).toBe(dots[2].style.background);
+	});
+
+	it("labels extension-less files as 'no ext'", () => {
+		const ctx = makeContext({
+			files: [{ path: "a.md" }, { path: "LICENSE" }],
+		});
+		const el = host();
+		renderFileTypeChart(ctx, el, makeConfig());
+
+		const labels = Array.from(el.querySelectorAll(".nexus-filetypes-legend-label")).map(
+			(n) => n.textContent,
+		);
+		expect(labels).toContain("no ext");
+		expect(labels).not.toContain("(none)");
 	});
 
 	it("renders nothing when the vault has no files", () => {
