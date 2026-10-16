@@ -398,7 +398,7 @@ npm install
 npm run dev          # watch mode
 npm run typecheck    # type-check (tsc --noEmit)
 npm run lint         # ESLint
-npm run test         # Vitest (371 tests)
+npm run test         # Vitest (402 tests)
 npm run build        # typecheck + production build
 ```
 

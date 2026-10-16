@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.5.1 — 2026-10-16
+
+Performance, correctness and maintainability release. No user-facing feature changes; the full audit trail lives in the Bug Hunt Report (vault).
+
+### Fixed
+
+- **First click after startup stalled** - the initial render deferred graph-link injection and vault scans behind an idle callback, so the very first interaction could hang until they finished; the work is now coalesced and cached so the first paint is instant
+- **File-type legend height key was ignored** - a `height:` key on a `filetypes:` block wrote `height` instead of `maxLegendHeight`, so the cap never applied; it now respects the configured height
+- **Post-unload timers injected phantom graph links** - scheduler callbacks were never disposed on unload, so a debounced graph rescan could fire after the plugin was disabled and re-inject links; every scheduler is now disposed in `onunload`
+- **Inert activity-tracking toggle** - the "track activity" setting did nothing because the write-dedupe key was wrong; it now correctly gates activity logging
+- **Parser edge cases** - boolean coercion, list parsing and structural-directive handling were hardened during the parser split
+
+### Changed
+
+- **Fewer, batched re-renders** - all five ad-hoc debouncers in `main.ts` were replaced by a single `CoalescedScheduler`, so settings edits and vault events coalesce instead of stacking
+- **Faster vault scans** - recently-modified files (10 s TTL) and the vault folder list (5 s TTL) are cached, and each render builds one shared snapshot instead of re-querying per block
+- **Faster graph-link injection** - the graph scan is incremental and task-file reads run concurrently via `mapWithConcurrency`
+- **Smoother drag-reorder** - list and layout drag operations save once at the end instead of on every pointer move
+
+### Internal
+
+- **Parser split into `DashboardParser`** - the giant `parseDashboard` function became a class with 25 focused methods; the public `parseDashboard()` API is unchanged
+- **New `scheduler.ts` and `cache.ts` modules** - `CoalescedScheduler` (debounce / earliest / lock modes) and `TtlCache`, each unit-tested
+- **Renderer settings builder extracted** - `buildConfigFromSettings` moved out of `renderer/index.ts` into `renderer/settings-layout.ts`, shrinking the coordinator
+- **Settings-tab helpers de-duplicated** - shared card, list and divider builders extracted across the layout and components tabs
+- **Type aliases** - `StatEntry` and `NewNoteSettings` are now aliases of the canonical `StatItem` / `NewNoteConfig`, removing the duplicate definitions
+- **CI workflow fixed** - the trigger branch was `main` but the default branch is `master`, so CI never ran
+
 ## v1.5.0 — 2026-10-16
 
 ### Added
