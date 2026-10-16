@@ -1,9 +1,14 @@
 # Changelog
 
-## Unreleased
+## v1.5.0 — 2026-10-16
 
 ### Added
 
+- **Keyboard / WASD dashboard navigation** - arrow keys and `W A S D` move focus between dashboard widgets on a grid: left/right step across a visual row, up/down keep the column, and the target scrolls into view. Enabled by default, with an opt-out and a "focus on open" toggle in the new **Navigation** settings tab. MOC cards drop their per-card tab stop since the dashboard root now owns focus
+- **MOC card keyboard accessibility** - cards are focusable (`role="link"`, `aria-label="Open {label}"`), open with Enter/Space, and open their context menu (Open / Copy path / Move up / Move down) with the Menu key or Shift+F10 at the card position
+- **Dead-link styling** - MOC cards whose target note no longer exists are marked (`.nexus-card-dead`) instead of looking identical to live cards
+- **MOC cards tray height cap** - the MOC grid now sits in the unified panel recipe (`.nexus-moc-panel`); a `height: <px>` key on a `section:` block and a "MOC cards tray height" slider (0 = Auto) cap the tray, which scrolls on overflow
+- **Single Default preset** - the four built-in layouts are collapsed into one **Default** preset that mirrors the shipped fresh-install layout; the active preset is detected structurally, and the Presets tab is now a compact list with **Active** / **Default** badges
 - **Timeline rows scroll sideways instead of clipping** - long paths and change details were cut off with an ellipsis at the panel edge; the list is now a single max-content column, so every row keeps its full width and the panel scrolls horizontally (shift + mouse wheel, or a trackpad swipe) like a spreadsheet. Day separators span the full scroll width, and short rows still fill the panel as before
 - **Timeline row hover tooltip** - hovering a row animates in a tooltip with the action, the full timestamp, the untruncated path (`old -> new` for renames and moves) and the change detail on separate lines, so nothing stays hidden when a path is long. It replaces the previous tooltip that only showed the timestamp
 - **`npm run gen:fonts`** - a dev-only script (`scripts/gen-fonts.mjs`, fetches `.flf` from `patorjk/figlet.js`) that regenerates `src/fonts/*.ts` from canonical FIGlet data, so the hand-written fonts can be re-synced or a new font added from upstream source
@@ -16,6 +21,10 @@
 - **Heatmap month labels sat one column too far right** - month anchors were measured from a noon cursor against a midnight range start, and rounding pulled the fractional day up a full day, so any month whose 1st landed on the week column's last day was anchored into the _next_ week (e.g. Nov and Aug in a 52-week view); anchors now use the exact calendar-day distance. Month labels are also collected per year-month instead of month number, so a range that crosses a year boundary or repeats a month name (over 52 weeks) keeps every label in order instead of dropping/overlapping them
 - **Heatmap outer week columns were still clipped** - the 52-week calendar's nested CSS grid (53 outer tracks vs 52 inner tracks, each with its own gaps) was sized in two independent passes that drifted apart by one gap, so the first/last (Nov/Oct) columns kept losing a hairline at the panel edge even after the track clamp. The heatmap is now a single self-scaling inline `<svg>` with a `viewBox`, drawn the way the DKirwan `calendar-heatmap` reference is, so `width: 100%` fits it to any panel or column and there is no inner grid or `overflow` left to clip against. Cell geometry is centralised in an exported `HEATMAP_GEOMETRY` (11px cell, 2px gap, 2px radius, 28px day gutter, 16px month header) and the per-day cells, counts and tooltips are unchanged
 - **New Note button was taller than the stat cards** - the button and its label had no line-height, so the label inherited Obsidian's global ~1.5 line-height (~15.7 px) while the stat cards force `line-height: 1` (~13.6 px); with the row centered on its cross-axis the button sat ~2 px taller. The button row is now `align-items: stretch` and the button + label force `line-height: 1`, so every box on the row is exactly the same height
+- **File-type legend colors ignored the file count** - legend swatches were colored by rank position (cycling an 8-step ramp) instead of by count, so a 1-file extension looked identical to the dominant one. Counts now map to the ramp on a log scale: the largest type gets the full accent and rarer types read progressively lighter, with equal counts sharing a color
+- **File-type chart showed a `(none)` type** - files with no extension (empty `TFile.extension`) were labeled literally `(none)`; the bucket is now labeled `no ext` and still counts toward the total
+- **Task summary showed "No tasks found" on a cold start** - a `null` metadata cache means Obsidian has not indexed the file yet, not that it has no tasks, so the empty state now reads **Loading** until the cache settles
+- **`tasks:` block rendered before the metadata cache settled** - a `tasks:` block could render empty on fresh open because the vault was still indexing when the dashboard first painted; the plugin now re-renders open dashboards on a debounced (800 ms) `metadataCache "changed"` event
 
 ### Removed
 
@@ -24,6 +33,8 @@
 ### Changed
 
 - **Heatmap scale** - the 4 intensity levels now blend in `oklab` (40 / 60 / 80 / 100 %) instead of `srgb` (30 / 50 / 70 / 100 %), so the steps are perceptually even
+- **Tighter default height caps** - vault activity 240 px, timeline 410 px, task summary 120 px, file types 120 px; the Project vault list now points at the `Project` folder, the default vault-activity count is 50, column spacing is `0.25rem`, and vault-activity path matching trims trailing slashes
+- **Settings tab split into per-tab modules** - `settings/index.ts` was split into `settings/tabs/*.ts` (`general`, `header`, `layout`, `presets`, `components`) behind a thin coordinator; a mechanical move with no behavior change, and `saveAndRefresh()` now re-renders only the active tab
 
 ## v1.4.0 — 2026-09-17
 
